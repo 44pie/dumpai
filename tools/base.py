@@ -25,7 +25,7 @@ class BaseTool(ABC):
     name: str = "base_tool"
     description: str = "Base tool"
     
-    def __init__(self, sqlmap_config: Dict):
+    def __init__(self, sqlmap_config: Dict, verbose: bool = False):
         self.config = sqlmap_config
         self.prefix = sqlmap_config.get("prefix", "")
         self.sqlmap_path = sqlmap_config.get("sqlmap_path", "sqlmap")
@@ -33,6 +33,7 @@ class BaseTool(ABC):
         self.parameter = sqlmap_config.get("parameter", "")
         self.database = sqlmap_config.get("database", "")
         self.extra_flags = sqlmap_config.get("extra_flags", [])
+        self.verbose = verbose
     
     def _build_base_cmd(self) -> List[str]:
         """Build base SQLMap command parts."""
@@ -53,6 +54,9 @@ class BaseTool(ABC):
     
     def _run_cmd(self, cmd: str, timeout: int = 0, idle_timeout: int = 600) -> str:
         """Execute command with streaming output."""
+        if self.verbose:
+            print(f"\033[38;2;94;129;172m[○] CMD: {cmd}\033[0m")
+        
         start_time = time.time()
         
         try:
