@@ -18,9 +18,7 @@ class EnumerateDBs(BaseTool):
     def execute(self, **kwargs) -> ToolResult:
         start = time.time()
         
-        parts = self._build_base_cmd()
-        parts.append("--dbs")
-        cmd = " ".join(parts)
+        cmd = self._build_cmd("--dbs")
         
         output = self._run_cmd(cmd, idle_timeout=300)
         databases = self._parse_table_output(output)
@@ -45,11 +43,11 @@ class EnumerateTables(BaseTool):
         
         db = database or self.database
         
-        parts = self._build_base_cmd()
+        args = []
         if db:
-            parts.append(f'-D {db}')
-        parts.append("--tables")
-        cmd = " ".join(parts)
+            args.append(f'-D {db}')
+        args.append("--tables")
+        cmd = self._build_cmd(*args)
         
         output = self._run_cmd(cmd, idle_timeout=600)
         tables = self._parse_table_output(output)
@@ -77,12 +75,12 @@ class GetColumns(BaseTool):
         
         db = database or self.database
         
-        parts = self._build_base_cmd()
+        args = []
         if db:
-            parts.append(f'-D {db}')
-        parts.append(f'-T {table}')
-        parts.append("--columns")
-        cmd = " ".join(parts)
+            args.append(f'-D {db}')
+        args.append(f'-T {table}')
+        args.append("--columns")
+        cmd = self._build_cmd(*args)
         
         output = self._run_cmd(cmd, idle_timeout=600)
         columns = self._parse_table_output(output)
@@ -110,11 +108,7 @@ class SearchTables(BaseTool):
         
         pattern_str = ",".join(patterns)
         
-        parts = self._build_base_cmd()
-        parts.append("--search")
-        parts.append(f'-T "{pattern_str}"')
-        parts.append("--batch")
-        cmd = " ".join(parts)
+        cmd = self._build_cmd("--search", f'-T "{pattern_str}"')
         
         output = self._run_cmd(cmd, idle_timeout=900)
         tables = self._parse_search_output(output)
@@ -162,11 +156,7 @@ class SearchColumns(BaseTool):
         
         pattern_str = ",".join(patterns)
         
-        parts = self._build_base_cmd()
-        parts.append("--search")
-        parts.append(f'-C "{pattern_str}"')
-        parts.append("--batch")
-        cmd = " ".join(parts)
+        cmd = self._build_cmd("--search", f'-C "{pattern_str}"')
         
         output = self._run_cmd(cmd, idle_timeout=900)
         columns = self._parse_search_output(output)
