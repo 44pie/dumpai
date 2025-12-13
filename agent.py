@@ -71,80 +71,25 @@ class DumpAgent:
         self._init_tools()
     
     def _parse_command(self, cmd: str) -> Dict:
-        """Parse SQLMap command into config."""
+        """Parse SQLMap command - keep base command as-is."""
         config = {
-            "prefix": "",
-            "sqlmap_path": "sqlmap",
-            "request_file": "",
-            "parameter": "",
+            "base_cmd": cmd,
             "database": "",
-            "dbms": "mysql",
-            "extra_flags": []
+            "request_file": "",
+            "parameter": ""
         }
-        
-        proxy_match = re.match(r'(proxychains\S*\s+-\S+\s+)', cmd)
-        if proxy_match:
-            config["prefix"] = proxy_match.group(1)
-        
-        sqlmap_match = re.search(r'(python3?\s+\S*sqlmap[^\s]*\.py)', cmd)
-        if sqlmap_match:
-            config["sqlmap_path"] = sqlmap_match.group(1)
-        
-        r_match = re.search(r'-r\s+["\']?([^"\'\s]+)["\']?', cmd)
-        if r_match:
-            config["request_file"] = r_match.group(1)
-        
-        try:
-            tokens = shlex.split(cmd)
-            for i, token in enumerate(tokens):
-                if token == '-p' and i + 1 < len(tokens):
-                    next_token = tokens[i + 1]
-                    if not next_token.startswith('-'):
-                        config["parameter"] = next_token
-                    break
-        except ValueError:
-            p_match = re.search(r'-p\s+([a-zA-Z0-9_\[\]]+)', cmd)
-            if p_match:
-                config["parameter"] = p_match.group(1)
         
         d_match = re.search(r'-D\s+(\S+)', cmd)
         if d_match:
             config["database"] = d_match.group(1)
         
-        dbms_match = re.search(r'--dbms[=\s]+(\S+)', cmd)
-        if dbms_match:
-            config["dbms"] = dbms_match.group(1)
+        r_match = re.search(r'-r\s+["\']?([^"\'\s]+)["\']?', cmd)
+        if r_match:
+            config["request_file"] = r_match.group(1)
         
-        preserve_flags = [
-            r'--risk[=\s]+\d+',
-            r'--level[=\s]+\d+',
-            r'--batch',
-            r'--threads[=\s]+\d+',
-            r'--time-sec[=\s]+\d+',
-            r'--technique[=\s]+\S+',
-            r'--tamper[=\s]+\S+',
-            r'--random-agent',
-            r'--ignore-stdin',
-            r'--output-dir[=\s]+"[^"]+"',
-            r'--output-dir[=\s]+\S+',
-            r'--proxy[=\s]+\S+',
-            r'--tor',
-            r'--delay[=\s]+\d+',
-            r'--timeout[=\s]+\d+',
-            r'--retries[=\s]+\d+',
-            r'-v+',
-            r'--flush-session',
-            r'--fresh-queries',
-            r'--hex',
-            r'--no-cast',
-            r'--skip-urlencode'
-        ]
-        
-        for pattern in preserve_flags:
-            matches = re.findall(pattern, cmd)
-            for match in matches:
-                if match not in config["extra_flags"]:
-                    config["extra_flags"].append(match)
+        p_match = re.search(r'-p\s+["\']?([^"\'\s]+)["\']?', cmd)
+        if p_match:
+            config["parameter"] = p_match.group(1)
         
         return config
     
