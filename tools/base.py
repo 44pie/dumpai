@@ -52,6 +52,28 @@ class BaseTool(ABC):
         
         return parts
     
+    SQLMAP_KEY_PATTERNS = [
+        "available databases",
+        "fetching tables",
+        "fetching columns",
+        "retrieved:",
+        "[INFO] the back-end DBMS is",
+        "time-based blind",
+        "boolean-based blind",
+        "error-based",
+        "UNION query",
+        "stacked queries",
+        "[WARNING]",
+        "[ERROR]",
+        "[CRITICAL]",
+        "might be injectable",
+        "is vulnerable",
+        "sqlmap identified",
+        "fetched data logged",
+        "dumping",
+        "entries found"
+    ]
+    
     def _run_cmd(self, cmd: str, timeout: int = 0, idle_timeout: int = 600) -> str:
         """Execute command with streaming output."""
         if self.verbose:
@@ -81,6 +103,9 @@ class BaseTool(ABC):
                         if line:
                             output_lines.append(line)
                             last_output_time = time.time()
+                            
+                            if self.verbose:
+                                self._check_key_output(line)
                 
                 if process.poll() is not None:
                     remaining = process.stdout.read() if process.stdout else ""
@@ -100,6 +125,16 @@ class BaseTool(ABC):
             
         except Exception as e:
             return f"ERROR: {e}"
+    
+    def _check_key_output(self, line: str):
+        """Print key SQLMap output lines in verbose mode."""
+        line_lower = line.lower()
+        for pattern in self.SQLMAP_KEY_PATTERNS:
+            if pattern.lower() in line_lower:
+                clean = line.strip()
+                if clean:
+                    print(f"    [SQLMAP] {clean}")
+                break
     
     def _parse_table_output(self, output: str) -> List[str]:
         """Parse table/column names from SQLMap output."""
