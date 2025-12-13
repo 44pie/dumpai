@@ -55,7 +55,7 @@ class BaseTool(ABC):
     def _run_cmd(self, cmd: str, timeout: int = 0, idle_timeout: int = 600) -> str:
         """Execute command with streaming output."""
         if self.verbose:
-            print(f"\033[38;2;94;129;172m[○] CMD: {cmd}\033[0m")
+            print(f"[*] CMD: {cmd}")
         
         start_time = time.time()
         
