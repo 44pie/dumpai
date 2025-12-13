@@ -100,25 +100,54 @@ class SearchTables(BaseTool):
     name = "search_tables"
     description = "Search for tables matching patterns (faster than full enumeration)"
     
-    def execute(self, patterns: Optional[List[str]] = None, **kwargs) -> ToolResult:
+    def _search_single_pattern(self, pattern: str) -> List[str]:
+        """Search for single pattern."""
+        cmd = self._build_cmd("--search", f'-T "{pattern}"')
+        output = self._run_cmd(cmd, idle_timeout=600)
+        return self._parse_search_output(output)
+    
+    def execute(self, patterns: Optional[List[str]] = None, 
+                parallel: bool = True, max_workers: int = 5, **kwargs) -> ToolResult:
         start = time.time()
         
         if not patterns:
             return ToolResult(success=False, error="Patterns list required")
         
-        pattern_str = ",".join(patterns)
+        all_tables = []
         
-        cmd = self._build_cmd("--search", f'-T "{pattern_str}"')
+        if parallel and len(patterns) > 1:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            
+            if self.verbose:
+                print(f"    [PARALLEL] Searching {len(patterns)} patterns with {max_workers} workers")
+            
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {executor.submit(self._search_single_pattern, p): p for p in patterns}
+                for future in as_completed(futures):
+                    pattern = futures[future]
+                    try:
+                        tables = future.result()
+                        if tables:
+                            all_tables.extend(tables)
+                            if self.verbose:
+                                print(f"    [PARALLEL] Pattern '{pattern}': found {len(tables)} tables")
+                    except Exception as e:
+                        if self.verbose:
+                            print(f"    [PARALLEL] Pattern '{pattern}' error: {e}")
+        else:
+            pattern_str = ",".join(patterns)
+            cmd = self._build_cmd("--search", f'-T "{pattern_str}"')
+            output = self._run_cmd(cmd, idle_timeout=900)
+            all_tables = self._parse_search_output(output)
         
-        output = self._run_cmd(cmd, idle_timeout=900)
-        tables = self._parse_search_output(output)
+        unique_tables = list(dict.fromkeys(all_tables))
         
         return ToolResult(
-            success=len(tables) > 0,
-            data=tables,
-            raw_output=output,
+            success=len(unique_tables) > 0,
+            data=unique_tables,
+            raw_output="",
             execution_time=time.time() - start,
-            metadata={"patterns": patterns, "count": len(tables)}
+            metadata={"patterns": patterns, "count": len(unique_tables), "parallel": parallel}
         )
     
     def _parse_search_output(self, output: str) -> List[str]:

@@ -53,7 +53,8 @@ class DumpAgent:
     
     def __init__(self, command: str, categories: Optional[List[str]] = None,
                  output_dir: str = "dumpai_out", max_parallel: int = 5,
-                 verbose: bool = False, smart_search: bool = False):
+                 verbose: bool = False, smart_search: bool = False,
+                 max_rows: int = 0, parallel_sqlmap: bool = True):
         
         self.config = self._parse_command(command)
         self.categories = categories or ["user_data", "sys_data"]
@@ -61,6 +62,8 @@ class DumpAgent:
         self.max_parallel = max_parallel
         self.verbose = verbose
         self.smart_search = smart_search
+        self.max_rows = max_rows
+        self.parallel_sqlmap = parallel_sqlmap
         self.injection_type = "unknown"
         
         os.makedirs(output_dir, exist_ok=True)
@@ -146,7 +149,9 @@ class DumpAgent:
         
         self._log(f"Searching tables by patterns: {', '.join(patterns[:5])}...", "INFO")
         
-        result = self._execute_tool("search_tables", patterns=patterns)
+        result = self._execute_tool("search_tables", patterns=patterns, 
+                                     parallel=self.parallel_sqlmap,
+                                     max_workers=self.max_parallel)
         
         if result and result.success and result.data:
             tables = []
@@ -336,7 +341,8 @@ class DumpAgent:
             result = self._execute_tool("get_columns", database=database, table=table)
             
             if not result or not result.success:
-                dump_result = self._execute_tool("dump_table", database=database, table=table)
+                dump_result = self._execute_tool("dump_table", database=database, table=table,
+                                                  max_rows=self.max_rows)
                 if dump_result and dump_result.success:
                     for cat, _ in plans:
                         table_results[cat] = dump_result.data
@@ -367,7 +373,10 @@ class DumpAgent:
                                 "dump_columns",
                                 database=database,
                                 table=table,
-                                columns=valid_cols
+                                columns=valid_cols,
+                                max_rows=self.max_rows,
+                                parallel=self.parallel_sqlmap,
+                                max_workers=self.max_parallel
                             )
                             
                             if dump_result and dump_result.success:
@@ -379,7 +388,10 @@ class DumpAgent:
                         "dump_columns",
                         database=database,
                         table=table,
-                        columns=cols
+                        columns=cols,
+                        max_rows=self.max_rows,
+                        parallel=self.parallel_sqlmap,
+                        max_workers=self.max_parallel
                     )
                     
                     if dump_result and dump_result.success:

@@ -81,6 +81,10 @@ Examples:
                         help="Verbose output")
     parser.add_argument("--smart-search", action="store_true",
                         help="Force Smart Search mode (auto-enabled for blind injections)")
+    parser.add_argument("-mr", "--max-rows", type=int, default=0,
+                        help="Max rows to dump per table (0 = unlimited)")
+    parser.add_argument("--no-parallel", action="store_true",
+                        help="Disable parallel SQLMap processes")
     
     parser.add_argument("--resume", metavar="SESSION_FILE",
                         help="Resume from saved session file")
@@ -127,7 +131,9 @@ Examples:
             output_dir=args.output,
             max_parallel=args.parallel,
             verbose=args.verbose,
-            smart_search=args.smart_search
+            smart_search=args.smart_search,
+            max_rows=args.max_rows,
+            parallel_sqlmap=not args.no_parallel
         )
         
         agent.run()
