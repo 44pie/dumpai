@@ -58,6 +58,14 @@ class BaseTool(ABC):
         "fetching columns",
         "retrieved:",
         "[INFO] the back-end DBMS is",
+        "[INFO] testing",
+        "[INFO] resuming",
+        "[INFO] GET parameter",
+        "[INFO] POST parameter", 
+        "[INFO] heuristic",
+        "[INFO] confirming",
+        "[INFO] target URL",
+        "[INFO] parsing",
         "time-based blind",
         "boolean-based blind",
         "error-based",
@@ -71,7 +79,20 @@ class BaseTool(ABC):
         "sqlmap identified",
         "fetched data logged",
         "dumping",
-        "entries found"
+        "entries found",
+        "starting",
+        "connection to",
+        "tested",
+        "payload:",
+        "Type:",
+        "Title:",
+        "Payload:",
+        "Vector:",
+        "retrieved: ",
+        "current database",
+        "Database:",
+        "Table:",
+        "[*]"
     ]
     
     def _run_cmd(self, cmd: str, timeout: int = 0, idle_timeout: int = 600) -> str:
