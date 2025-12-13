@@ -100,6 +100,15 @@ Response format:
 
         result = self._call_ai(prompt, system_prompt)
         
+        if self.verbose and result:
+            print(f"    [AI] CMS detected: {result.get('cms_detected', 'Unknown')}")
+            print(f"    [AI] Database type: {result.get('database_type', 'unknown')}")
+            extractions = result.get('extractions', [])
+            if extractions:
+                print(f"    [AI] Extraction targets: {len(extractions)}")
+                for ext in extractions[:5]:
+                    print(f"         -> {ext.get('table')} ({ext.get('category')}, {ext.get('priority')})")
+        
         return ToolResult(
             success=bool(result),
             data=result,
@@ -185,6 +194,14 @@ Response format:
 }}"""
 
         result = self._call_ai(prompt, system_prompt)
+        
+        if self.verbose and result:
+            recs = result.get('recommended_extractions', [])
+            if recs:
+                for rec in recs:
+                    cols = rec.get('columns', [])
+                    cat = rec.get('category', '')
+                    print(f"    [AI] {table}: extract {cols} for {cat}")
         
         return ToolResult(
             success=bool(result),
