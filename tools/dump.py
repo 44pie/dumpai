@@ -48,12 +48,12 @@ class DumpTable(BaseTool):
         
         db = database or self.database
         
-        parts = self._build_base_cmd()
+        args = []
         if db:
-            parts.append(f'-D {db}')
-        parts.append(f'-T {table}')
-        parts.append("--dump")
-        cmd = " ".join(parts)
+            args.append(f'-D {db}')
+        args.append(f'-T {table}')
+        args.append("--dump")
+        cmd = self._build_cmd(*args)
         
         output = self._run_cmd(cmd, idle_timeout=900)
         rows = self._parse_dump(output)
@@ -105,13 +105,13 @@ class DumpColumns(BaseTool):
         
         db = database or self.database
         
-        parts = self._build_base_cmd()
+        args = []
         if db:
-            parts.append(f'-D {db}')
-        parts.append(f'-T {table}')
-        parts.append(f'-C {",".join(columns)}')
-        parts.append("--dump")
-        cmd = " ".join(parts)
+            args.append(f'-D {db}')
+        args.append(f'-T {table}')
+        args.append(f'-C {",".join(columns)}')
+        args.append("--dump")
+        cmd = self._build_cmd(*args)
         
         output = self._run_cmd(cmd, idle_timeout=900)
         rows = self._parse_dump(output)
