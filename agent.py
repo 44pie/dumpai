@@ -23,24 +23,46 @@ except ImportError:
 
 
 class Colors:
-    HEADER = '\033[95m'
-    BLUE = '\033[94m'
-    CYAN = '\033[96m'
-    GREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
+    NORD0 = '\033[38;2;46;52;64m'
+    NORD1 = '\033[38;2;59;66;82m'
+    NORD3 = '\033[38;2;76;86;106m'
+    NORD4 = '\033[38;2;216;222;233m'
+    NORD7 = '\033[38;2;143;188;187m'
+    NORD8 = '\033[38;2;136;192;208m'
+    NORD9 = '\033[38;2;129;161;193m'
+    NORD10 = '\033[38;2;94;129;172m'
+    NORD11 = '\033[38;2;191;97;106m'
+    NORD12 = '\033[38;2;208;135;112m'
+    NORD13 = '\033[38;2;235;203;139m'
+    NORD14 = '\033[38;2;163;190;140m'
+    NORD15 = '\033[38;2;180;142;173m'
+    
+    HEADER = NORD15
+    BLUE = NORD10
+    CYAN = NORD8
+    GREEN = NORD14
+    WARNING = NORD13
+    FAIL = NORD11
     END = '\033[0m'
     BOLD = '\033[1m'
     DIM = '\033[2m'
+    
+    FROST = NORD8
+    AURORA = NORD14
+    SNOW = NORD4
 
 
 BANNER = f"""
-{Colors.CYAN}░█▀▄░█░█░█▄█░█▀█░█▀█░▀█▀
-░█░█░█░█░█░█░█▀▀░█▀█░░█░
-░▀▀░░▀▀▀░▀░▀░▀░░░▀░▀░▀▀▀{Colors.END}
+{Colors.FROST}
+    ██████╗ ██╗   ██╗███╗   ███╗██████╗  █████╗ ██╗
+    ██╔══██╗██║   ██║████╗ ████║██╔══██╗██╔══██╗██║
+    ██║  ██║██║   ██║██╔████╔██║██████╔╝███████║██║
+    ██║  ██║██║   ██║██║╚██╔╝██║██╔═══╝ ██╔══██║██║
+    ██████╔╝╚██████╔╝██║ ╚═╝ ██║██║     ██║  ██║██║
+    ╚═════╝  ╚═════╝ ╚═╝     ╚═╝╚═╝     ╚═╝  ╚═╝╚═╝{Colors.END}
 
-{Colors.GREEN}  AI-Powered Autonomous Data Extractor{Colors.END}
-{Colors.DIM}  v2.0 - Agent Architecture{Colors.END}
+{Colors.AURORA}  ❄ AI-Powered Autonomous Data Extractor{Colors.END}
+{Colors.SNOW}  v2.1 - Nordic Theme{Colors.END}
 """
 
 
@@ -132,15 +154,15 @@ class DumpAgent:
     def _init_tools(self):
         """Initialize all tools."""
         self.tools = {
-            "enumerate_dbs": EnumerateDBs(self.config),
-            "enumerate_tables": EnumerateTables(self.config),
-            "get_columns": GetColumns(self.config),
-            "search_tables": SearchTables(self.config),
-            "search_columns": SearchColumns(self.config),
-            "dump_table": DumpTable(self.config),
-            "dump_columns": DumpColumns(self.config),
-            "analyze_schema": AnalyzeSchema(self.config),
-            "analyze_columns": AnalyzeColumns(self.config)
+            "enumerate_dbs": EnumerateDBs(self.config, verbose=self.verbose),
+            "enumerate_tables": EnumerateTables(self.config, verbose=self.verbose),
+            "get_columns": GetColumns(self.config, verbose=self.verbose),
+            "search_tables": SearchTables(self.config, verbose=self.verbose),
+            "search_columns": SearchColumns(self.config, verbose=self.verbose),
+            "dump_table": DumpTable(self.config, verbose=self.verbose),
+            "dump_columns": DumpColumns(self.config, verbose=self.verbose),
+            "analyze_schema": AnalyzeSchema(self.config, verbose=self.verbose),
+            "analyze_columns": AnalyzeColumns(self.config, verbose=self.verbose)
         }
     
     def _detect_injection_type(self, raw_output: str) -> str:
@@ -214,32 +236,44 @@ class DumpAgent:
         return []
     
     def _log(self, msg: str, level: str = "INFO"):
-        """Log message with color."""
+        """Log message with Nordic color theme."""
         timestamp = datetime.now().strftime("%H:%M:%S")
         
         colors = {
-            "INFO": Colors.GREEN,
-            "WARNING": Colors.WARNING,
-            "ERROR": Colors.FAIL,
-            "DEBUG": Colors.DIM,
-            "SUCCESS": Colors.CYAN,
-            "DATA": Colors.BLUE
+            "INFO": Colors.NORD8,
+            "WARNING": Colors.NORD13,
+            "ERROR": Colors.NORD11,
+            "DEBUG": Colors.NORD3,
+            "SUCCESS": Colors.NORD14,
+            "DATA": Colors.NORD9,
+            "PHASE": Colors.NORD15
         }
         
         symbols = {
-            "INFO": "+",
-            "WARNING": "!",
+            "INFO": "◆",
+            "WARNING": "⚠",
             "ERROR": "✗",
-            "DEBUG": "*",
-            "SUCCESS": "✓",
-            "DATA": "▶"
+            "DEBUG": "○",
+            "SUCCESS": "❄",
+            "DATA": "▸",
+            "PHASE": "━"
         }
         
-        color = colors.get(level, "")
-        symbol = symbols.get(level, "*")
+        color = colors.get(level, Colors.NORD4)
+        symbol = symbols.get(level, "◆")
         
-        line = f"[{timestamp}] [{symbol}] {msg}"
-        print(f"{color}{line}{Colors.END}")
+        line = f"{Colors.NORD3}[{timestamp}]{Colors.END} {color}[{symbol}]{Colors.END} {color}{msg}{Colors.END}"
+        print(line)
+    
+    def _phase_header(self, title: str):
+        """Print Nordic-styled phase header."""
+        width = 60
+        border = f"{Colors.NORD10}{'━' * width}{Colors.END}"
+        title_line = f"{Colors.FROST}  ❄ {title}{Colors.END}"
+        print()
+        print(border)
+        print(title_line)
+        print(border)
     
     def _execute_tool(self, tool_name: str, **params) -> Optional[Any]:
         """Execute a tool and record in memory."""
@@ -271,9 +305,7 @@ class DumpAgent:
         print(BANNER)
         start_time = time.time()
         
-        self._log("=" * 60)
-        self._log("DUMPAI v2.0 - AUTONOMOUS EXTRACTION")
-        self._log("=" * 60)
+        self._phase_header("AUTONOMOUS EXTRACTION")
         self._log(f"Request: {self.config['request_file']}")
         self._log(f"Parameter: {self.config['parameter']}")
         self._log(f"Categories: {', '.join(self.categories)}")
@@ -299,9 +331,7 @@ class DumpAgent:
                 self._log("Could not enumerate databases", "ERROR")
                 return
         
-        self._log("=" * 60)
-        self._log("PHASE 1: TABLE DISCOVERY")
-        self._log("=" * 60)
+        self._phase_header("PHASE 1: TABLE DISCOVERY")
         
         use_smart_search = self.smart_search or self._is_slow_injection()
         
@@ -331,9 +361,7 @@ class DumpAgent:
         self.memory.tables = tables
         self._log(f"Found {len(tables)} tables", "SUCCESS")
         
-        self._log("=" * 60)
-        self._log("PHASE 2: AI SCHEMA ANALYSIS")
-        self._log("=" * 60)
+        self._phase_header("PHASE 2: AI SCHEMA ANALYSIS")
         
         result = self._execute_tool(
             "analyze_schema",
@@ -357,9 +385,7 @@ class DumpAgent:
             self._log("AI analysis failed, using pattern matching", "WARNING")
             self.memory.extractions = self._fallback_analysis(tables)
         
-        self._log("=" * 60)
-        self._log("PHASE 3: PARALLEL EXTRACTION")
-        self._log("=" * 60)
+        self._phase_header("PHASE 3: PARALLEL EXTRACTION")
         
         extraction_plan = {}
         for ext in self.memory.extractions:
@@ -456,18 +482,21 @@ class DumpAgent:
                 except Exception as e:
                     self._log(f"Error processing {table}: {e}", "ERROR")
         
-        self._log("=" * 60)
-        self._log("EXTRACTION COMPLETE", "SUCCESS")
-        self._log("=" * 60)
+        self._phase_header("EXTRACTION COMPLETE")
         
         self.memory.stats["duration"] = time.time() - start_time
         self._save_results()
         
         summary = self.memory.get_summary()
-        self._log(f"Duration: {summary['duration']:.1f}s")
-        self._log(f"Tables processed: {summary['tables_processed']}")
-        self._log(f"Rows extracted: {summary['rows_extracted']}")
-        self._log(f"AI calls: {summary['ai_calls']}")
+        print()
+        print(f"{Colors.SNOW}  ┌{'─' * 40}┐{Colors.END}")
+        print(f"{Colors.SNOW}  │{Colors.FROST} ❄ SUMMARY{Colors.SNOW}{' ' * 30}│{Colors.END}")
+        print(f"{Colors.SNOW}  ├{'─' * 40}┤{Colors.END}")
+        print(f"{Colors.SNOW}  │{Colors.END} Duration:        {Colors.NORD8}{summary['duration']:.1f}s{Colors.END}{' ' * (22 - len(f'{summary[\"duration\"]:.1f}s'))}│")
+        print(f"{Colors.SNOW}  │{Colors.END} Tables:          {Colors.NORD14}{summary['tables_processed']}{Colors.END}{' ' * (22 - len(str(summary['tables_processed'])))}│")
+        print(f"{Colors.SNOW}  │{Colors.END} Rows:            {Colors.NORD14}{summary['rows_extracted']}{Colors.END}{' ' * (22 - len(str(summary['rows_extracted'])))}│")
+        print(f"{Colors.SNOW}  │{Colors.END} AI Calls:        {Colors.NORD9}{summary['ai_calls']}{Colors.END}{' ' * (22 - len(str(summary['ai_calls'])))}│")
+        print(f"{Colors.SNOW}  └{'─' * 40}┘{Colors.END}")
         
         for cat, count in summary["data_by_category"].items():
             if count > 0:
