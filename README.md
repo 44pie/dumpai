@@ -34,7 +34,7 @@ Intelligent extraction agent that uses AI to analyze database schemas, identify 
 |   +-------------+  +-------------+  +-------------+  +-------------+              |
 +-----------------------------------------------------------------------------------+
 |                               Workflow                                            |
-|   [1. Enumerate] --> [2. AI Analysis] --> [3. Parallel Dump] --> [4. Save JSON]  |
+|   [1. Enumerate] --> [2. AI Analysis] --> [3. Parallel Dump] --> [4. Save JSON]   |
 +-----------------------------------------------------------------------------------+
 ```
 
