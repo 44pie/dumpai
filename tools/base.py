@@ -27,30 +27,16 @@ class BaseTool(ABC):
     
     def __init__(self, sqlmap_config: Dict, verbose: bool = False):
         self.config = sqlmap_config
-        self.prefix = sqlmap_config.get("prefix", "")
-        self.sqlmap_path = sqlmap_config.get("sqlmap_path", "sqlmap")
-        self.request_file = sqlmap_config.get("request_file", "")
-        self.parameter = sqlmap_config.get("parameter", "")
+        self.base_cmd = sqlmap_config.get("base_cmd", "")
         self.database = sqlmap_config.get("database", "")
-        self.extra_flags = sqlmap_config.get("extra_flags", [])
         self.verbose = verbose
     
-    def _build_base_cmd(self) -> List[str]:
-        """Build base SQLMap command parts."""
-        parts = []
-        
-        if self.prefix:
-            parts.append(self.prefix.strip())
-        
-        parts.append(self.sqlmap_path)
-        parts.append(f'-r "{self.request_file}"')
-        
-        if self.parameter:
-            parts.append(f'-p "{self.parameter}"')
-        
-        parts.extend(self.extra_flags)
-        
-        return parts
+    def _build_cmd(self, *extra_args) -> str:
+        """Build command by appending args to base command."""
+        cmd = self.base_cmd
+        for arg in extra_args:
+            cmd = f"{cmd} {arg}"
+        return cmd
     
     SQLMAP_KEY_PATTERNS = [
         "available databases",
