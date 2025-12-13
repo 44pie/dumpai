@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DumpAI v2.0 - AI-Powered Autonomous Data Extractor
+DumpAI v2.2 - AI-Powered Autonomous Data Extractor
 
 Intelligent data extraction with category-based filtering:
 - user_data: Admin accounts, employees, logins, passwords, tokens
@@ -40,7 +40,7 @@ from memory import Memory
 
 def main():
     parser = argparse.ArgumentParser(
-        description="DumpAI v2.0 - AI-Powered Autonomous Data Extractor",
+        description="DumpAI v2.2 - AI-Powered Autonomous Data Extractor",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Categories:
