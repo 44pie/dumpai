@@ -22,47 +22,13 @@ except ImportError:
     )
 
 
-class Colors:
-    NORD0 = '\033[38;2;46;52;64m'
-    NORD1 = '\033[38;2;59;66;82m'
-    NORD3 = '\033[38;2;76;86;106m'
-    NORD4 = '\033[38;2;216;222;233m'
-    NORD7 = '\033[38;2;143;188;187m'
-    NORD8 = '\033[38;2;136;192;208m'
-    NORD9 = '\033[38;2;129;161;193m'
-    NORD10 = '\033[38;2;94;129;172m'
-    NORD11 = '\033[38;2;191;97;106m'
-    NORD12 = '\033[38;2;208;135;112m'
-    NORD13 = '\033[38;2;235;203;139m'
-    NORD14 = '\033[38;2;163;190;140m'
-    NORD15 = '\033[38;2;180;142;173m'
-    
-    HEADER = NORD15
-    BLUE = NORD10
-    CYAN = NORD8
-    GREEN = NORD14
-    WARNING = NORD13
-    FAIL = NORD11
-    END = '\033[0m'
-    BOLD = '\033[1m'
-    DIM = '\033[2m'
-    
-    FROST = NORD8
-    AURORA = NORD14
-    SNOW = NORD4
+BANNER = """
+░█▀▄░█░█░█▄█░█▀█░█▀█░▀█▀
+░█░█░█░█░█░█░█▀▀░█▀█░░█░
+░▀▀░░▀▀▀░▀░▀░▀░░░▀░▀░▀▀▀
 
-
-BANNER = f"""
-{Colors.FROST}
-    ██████╗ ██╗   ██╗███╗   ███╗██████╗  █████╗ ██╗
-    ██╔══██╗██║   ██║████╗ ████║██╔══██╗██╔══██╗██║
-    ██║  ██║██║   ██║██╔████╔██║██████╔╝███████║██║
-    ██║  ██║██║   ██║██║╚██╔╝██║██╔═══╝ ██╔══██║██║
-    ██████╔╝╚██████╔╝██║ ╚═╝ ██║██║     ██║  ██║██║
-    ╚═════╝  ╚═════╝ ╚═╝     ╚═╝╚═╝     ╚═╝  ╚═╝╚═╝{Colors.END}
-
-{Colors.AURORA}  ❄ AI-Powered Autonomous Data Extractor{Colors.END}
-{Colors.SNOW}  v2.1 - Nordic Theme{Colors.END}
+  AI-Powered Autonomous Data Extractor
+  v2.1 - Agent Architecture
 """
 
 
@@ -236,44 +202,27 @@ class DumpAgent:
         return []
     
     def _log(self, msg: str, level: str = "INFO"):
-        """Log message with Nordic color theme."""
+        """Log message."""
         timestamp = datetime.now().strftime("%H:%M:%S")
         
-        colors = {
-            "INFO": Colors.NORD8,
-            "WARNING": Colors.NORD13,
-            "ERROR": Colors.NORD11,
-            "DEBUG": Colors.NORD3,
-            "SUCCESS": Colors.NORD14,
-            "DATA": Colors.NORD9,
-            "PHASE": Colors.NORD15
-        }
-        
         symbols = {
-            "INFO": "◆",
-            "WARNING": "⚠",
-            "ERROR": "✗",
-            "DEBUG": "○",
-            "SUCCESS": "❄",
-            "DATA": "▸",
-            "PHASE": "━"
+            "INFO": "+",
+            "WARNING": "!",
+            "ERROR": "x",
+            "DEBUG": "*",
+            "SUCCESS": "+",
+            "DATA": ">"
         }
         
-        color = colors.get(level, Colors.NORD4)
-        symbol = symbols.get(level, "◆")
-        
-        line = f"{Colors.NORD3}[{timestamp}]{Colors.END} {color}[{symbol}]{Colors.END} {color}{msg}{Colors.END}"
-        print(line)
+        symbol = symbols.get(level, "+")
+        print(f"[{timestamp}] [{symbol}] {msg}")
     
     def _phase_header(self, title: str):
-        """Print Nordic-styled phase header."""
-        width = 60
-        border = f"{Colors.NORD10}{'━' * width}{Colors.END}"
-        title_line = f"{Colors.FROST}  ❄ {title}{Colors.END}"
+        """Print phase header."""
         print()
-        print(border)
-        print(title_line)
-        print(border)
+        print("=" * 60)
+        print(f"  {title}")
+        print("=" * 60)
     
     def _execute_tool(self, tool_name: str, **params) -> Optional[Any]:
         """Execute a tool and record in memory."""
@@ -488,20 +437,11 @@ class DumpAgent:
         self._save_results()
         
         summary = self.memory.get_summary()
-        dur_str = f"{summary['duration']:.1f}s"
-        tbl_str = str(summary['tables_processed'])
-        row_str = str(summary['rows_extracted'])
-        ai_str = str(summary['ai_calls'])
         
-        print()
-        print(f"{Colors.SNOW}  ┌{'─' * 40}┐{Colors.END}")
-        print(f"{Colors.SNOW}  │{Colors.FROST} ❄ SUMMARY{Colors.SNOW}{' ' * 30}│{Colors.END}")
-        print(f"{Colors.SNOW}  ├{'─' * 40}┤{Colors.END}")
-        print(f"{Colors.SNOW}  │{Colors.END} Duration:        {Colors.NORD8}{dur_str}{Colors.END}{' ' * (22 - len(dur_str))}│")
-        print(f"{Colors.SNOW}  │{Colors.END} Tables:          {Colors.NORD14}{tbl_str}{Colors.END}{' ' * (22 - len(tbl_str))}│")
-        print(f"{Colors.SNOW}  │{Colors.END} Rows:            {Colors.NORD14}{row_str}{Colors.END}{' ' * (22 - len(row_str))}│")
-        print(f"{Colors.SNOW}  │{Colors.END} AI Calls:        {Colors.NORD9}{ai_str}{Colors.END}{' ' * (22 - len(ai_str))}│")
-        print(f"{Colors.SNOW}  └{'─' * 40}┘{Colors.END}")
+        self._log(f"Duration: {summary['duration']:.1f}s")
+        self._log(f"Tables processed: {summary['tables_processed']}")
+        self._log(f"Rows extracted: {summary['rows_extracted']}")
+        self._log(f"AI calls: {summary['ai_calls']}")
         
         for cat, count in summary["data_by_category"].items():
             if count > 0:
