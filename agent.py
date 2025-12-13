@@ -488,14 +488,19 @@ class DumpAgent:
         self._save_results()
         
         summary = self.memory.get_summary()
+        dur_str = f"{summary['duration']:.1f}s"
+        tbl_str = str(summary['tables_processed'])
+        row_str = str(summary['rows_extracted'])
+        ai_str = str(summary['ai_calls'])
+        
         print()
         print(f"{Colors.SNOW}  ┌{'─' * 40}┐{Colors.END}")
         print(f"{Colors.SNOW}  │{Colors.FROST} ❄ SUMMARY{Colors.SNOW}{' ' * 30}│{Colors.END}")
         print(f"{Colors.SNOW}  ├{'─' * 40}┤{Colors.END}")
-        print(f"{Colors.SNOW}  │{Colors.END} Duration:        {Colors.NORD8}{summary['duration']:.1f}s{Colors.END}{' ' * (22 - len(f'{summary[\"duration\"]:.1f}s'))}│")
-        print(f"{Colors.SNOW}  │{Colors.END} Tables:          {Colors.NORD14}{summary['tables_processed']}{Colors.END}{' ' * (22 - len(str(summary['tables_processed'])))}│")
-        print(f"{Colors.SNOW}  │{Colors.END} Rows:            {Colors.NORD14}{summary['rows_extracted']}{Colors.END}{' ' * (22 - len(str(summary['rows_extracted'])))}│")
-        print(f"{Colors.SNOW}  │{Colors.END} AI Calls:        {Colors.NORD9}{summary['ai_calls']}{Colors.END}{' ' * (22 - len(str(summary['ai_calls'])))}│")
+        print(f"{Colors.SNOW}  │{Colors.END} Duration:        {Colors.NORD8}{dur_str}{Colors.END}{' ' * (22 - len(dur_str))}│")
+        print(f"{Colors.SNOW}  │{Colors.END} Tables:          {Colors.NORD14}{tbl_str}{Colors.END}{' ' * (22 - len(tbl_str))}│")
+        print(f"{Colors.SNOW}  │{Colors.END} Rows:            {Colors.NORD14}{row_str}{Colors.END}{' ' * (22 - len(row_str))}│")
+        print(f"{Colors.SNOW}  │{Colors.END} AI Calls:        {Colors.NORD9}{ai_str}{Colors.END}{' ' * (22 - len(ai_str))}│")
         print(f"{Colors.SNOW}  └{'─' * 40}┘{Colors.END}")
         
         for cat, count in summary["data_by_category"].items():
