@@ -115,6 +115,37 @@ class DumpAgent:
         if dbms_match:
             config["dbms"] = dbms_match.group(1)
         
+        preserve_flags = [
+            r'--risk[=\s]+\d+',
+            r'--level[=\s]+\d+',
+            r'--batch',
+            r'--threads[=\s]+\d+',
+            r'--time-sec[=\s]+\d+',
+            r'--technique[=\s]+\S+',
+            r'--tamper[=\s]+\S+',
+            r'--random-agent',
+            r'--ignore-stdin',
+            r'--output-dir[=\s]+"[^"]+"',
+            r'--output-dir[=\s]+\S+',
+            r'--proxy[=\s]+\S+',
+            r'--tor',
+            r'--delay[=\s]+\d+',
+            r'--timeout[=\s]+\d+',
+            r'--retries[=\s]+\d+',
+            r'-v+',
+            r'--flush-session',
+            r'--fresh-queries',
+            r'--hex',
+            r'--no-cast',
+            r'--skip-urlencode'
+        ]
+        
+        for pattern in preserve_flags:
+            matches = re.findall(pattern, cmd)
+            for match in matches:
+                if match not in config["extra_flags"]:
+                    config["extra_flags"].append(match)
+        
         return config
     
     def _init_tools(self):
