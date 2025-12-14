@@ -17,9 +17,27 @@ class Action:
     execution_time: float
 
 
+@dataclass
+class Hypothesis:
+    """AI hypothesis about the target."""
+    type: str  # cms, injection, valuable_data
+    value: str
+    confidence: float
+    source: str
+    timestamp: str = ""
+
+
 @dataclass 
 class Memory:
-    """Agent memory - stores history and state."""
+    """
+    Agent memory - stores history, state, and AI context.
+    
+    Enhanced for AI-driven decision making:
+    - hypotheses: AI-generated beliefs about target
+    - issue_log: Problems encountered with resolution attempts
+    - table_scores: Dynamic utility scores for prioritization
+    - strategy_history: Track strategy changes
+    """
     
     session_id: str = ""
     start_time: str = ""
@@ -31,6 +49,12 @@ class Memory:
     
     cms_detected: str = ""
     database_type: str = ""
+    injection_type: str = ""
+    
+    hypotheses: List[Hypothesis] = field(default_factory=list)
+    issue_log: List[Dict] = field(default_factory=list)
+    table_scores: Dict[str, float] = field(default_factory=dict)
+    strategy_history: List[Dict] = field(default_factory=list)
     
     extractions: List[Dict] = field(default_factory=list)
     extracted_data: Dict[str, List[Dict]] = field(default_factory=dict)
@@ -43,7 +67,9 @@ class Memory:
         "ai_tokens": 0,
         "commands_run": 0,
         "tables_processed": 0,
-        "rows_extracted": 0
+        "rows_extracted": 0,
+        "retries": 0,
+        "strategy_changes": 0
     })
     
     def __post_init__(self):
@@ -83,6 +109,43 @@ class Memory:
             "context": context or {}
         })
     
+    def add_hypothesis(self, type: str, value: str, confidence: float, source: str):
+        """Add AI hypothesis about target."""
+        h = Hypothesis(
+            type=type,
+            value=value,
+            confidence=confidence,
+            source=source,
+            timestamp=datetime.now().isoformat()
+        )
+        self.hypotheses.append(h)
+    
+    def add_issue(self, issue_type: str, description: str, 
+                  resolution: str = "", resolved: bool = False):
+        """Log an issue with optional resolution."""
+        self.issue_log.append({
+            "timestamp": datetime.now().isoformat(),
+            "type": issue_type,
+            "description": description,
+            "resolution": resolution,
+            "resolved": resolved
+        })
+        self.stats["retries"] += 1
+    
+    def update_table_score(self, table: str, score: float, reason: str = ""):
+        """Update utility score for a table."""
+        self.table_scores[table] = score
+    
+    def log_strategy_change(self, old_strategy: str, new_strategy: str, reason: str):
+        """Log a strategy change."""
+        self.strategy_history.append({
+            "timestamp": datetime.now().isoformat(),
+            "from": old_strategy,
+            "to": new_strategy,
+            "reason": reason
+        })
+        self.stats["strategy_changes"] += 1
+    
     def add_extracted_data(self, category: str, rows: List[Dict], 
                            source_table: str = ""):
         """Add extracted data."""
@@ -100,10 +163,22 @@ class Memory:
         
         context_parts.append(f"Database: {self.current_database}")
         context_parts.append(f"CMS: {self.cms_detected or 'Unknown'}")
+        context_parts.append(f"Injection: {self.injection_type or 'Unknown'}")
         context_parts.append(f"Tables found: {len(self.tables)}")
         
         if self.tables:
             context_parts.append(f"Sample tables: {', '.join(self.tables[:10])}")
+        
+        if self.hypotheses:
+            context_parts.append("\nAI Hypotheses:")
+            for h in self.hypotheses[-5:]:
+                context_parts.append(f"  - {h.type}: {h.value} (conf: {h.confidence:.2f})")
+        
+        if self.table_scores:
+            top_tables = sorted(self.table_scores.items(), key=lambda x: x[1], reverse=True)[:5]
+            context_parts.append("\nTop priority tables:")
+            for table, score in top_tables:
+                context_parts.append(f"  - {table}: {score:.2f}")
         
         recent_actions = self.history[-max_items:] if self.history else []
         if recent_actions:
@@ -117,6 +192,15 @@ class Memory:
             context_parts.append("\nRecent errors:")
             for err in recent_errors:
                 context_parts.append(f"  - {err['tool']}: {err['error'][:50]}")
+        
+        if self.issue_log:
+            unresolved = [i for i in self.issue_log if not i.get('resolved')]
+            if unresolved:
+                context_parts.append(f"\nUnresolved issues: {len(unresolved)}")
+        
+        if self.strategy_history:
+            last = self.strategy_history[-1]
+            context_parts.append(f"\nLast strategy change: {last['from']} -> {last['to']}")
         
         extracted_summary = {k: len(v) for k, v in self.extracted_data.items() if v}
         if extracted_summary:
