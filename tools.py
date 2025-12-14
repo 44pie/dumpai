@@ -347,6 +347,8 @@ class SearchTables(BaseTool):
         all_tables = []
         all_output = []
         
+        IGNORE_TLDS = {'com', 'org', 'net', 'io', 'edu', 'gov', 'co', 'ru', 'de', 'uk', 'fr', 'es', 'it', 'nl', 'be', 'ch', 'at', 'pl', 'cz', 'sk', 'hu', 'ro', 'bg', 'ua', 'by', 'kz', 'cn', 'jp', 'kr', 'in', 'br', 'mx', 'ar', 'cl', 'au', 'nz', 'za', 'eg', 'ng', 'ke', 'info', 'biz', 'tv', 'me', 'cc', 'ws', 'us', 'ca', 'eu'}
+        
         def search_pattern(pattern: str) -> Tuple[str, str, List[str]]:
             output_dir = self._get_output_dir()
             os.makedirs(output_dir, exist_ok=True)
@@ -358,10 +360,18 @@ class SearchTables(BaseTool):
             
             tables = []
             for line in output.split("\n"):
-                if "found" in line.lower() or line.strip().startswith("["):
-                    match = re.search(r'(\w+\.\w+)', line)
+                line_lower = line.lower()
+                if "found" in line_lower and "table" in line_lower:
+                    match = re.search(r"'([^']+)'", line)
                     if match:
-                        tables.append(match.group(1))
+                        table_ref = match.group(1)
+                        parts = table_ref.split('.')
+                        if len(parts) == 2:
+                            db, tbl = parts
+                            if tbl.lower() not in IGNORE_TLDS and len(tbl) > 2:
+                                tables.append(table_ref)
+                        elif len(parts) == 1 and len(table_ref) > 2:
+                            tables.append(table_ref)
             
             return pattern, output, tables
         
