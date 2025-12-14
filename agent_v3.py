@@ -75,7 +75,8 @@ class DumpAgentV3:
     def __init__(self, command: str, categories: Optional[List[str]] = None,
                  output_dir: str = "dumpai_out", max_parallel: int = 5,
                  verbose: bool = False, max_rows: int = 0,
-                 cms_override: str = None, prefix_override: str = None):
+                 cms_override: str = None, prefix_override: str = None,
+                 debug_log: str = None):
         
         self.config = self._parse_command(command)
         self.categories = categories or ["user_data", "api_key", "sys_data"]
@@ -85,6 +86,15 @@ class DumpAgentV3:
         self.max_rows = max_rows
         self.cms_override = cms_override
         self.prefix_override = prefix_override
+        self.debug_log = debug_log
+        self._debug_file = None
+        
+        if debug_log:
+            self._debug_file = open(debug_log, "w", buffering=1)
+            self._debug(f"=== DumpAI Debug Log Started: {datetime.now().isoformat()} ===")
+            self._debug(f"Command: {command}")
+            self._debug(f"Categories: {categories}")
+            self._debug(f"Config: {json.dumps(self.config, indent=2)}")
         
         os.makedirs(output_dir, exist_ok=True)
         
@@ -148,6 +158,12 @@ class DumpAgentV3:
             "analyze_columns": AnalyzeColumns(self.config, verbose=self.verbose)
         }
     
+    def _debug(self, msg: str):
+        """Write to debug log file."""
+        if self._debug_file:
+            timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+            self._debug_file.write(f"[{timestamp}] {msg}\n")
+    
     def _log(self, msg: str, level: str = "INFO"):
         """Log with timestamp."""
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -156,7 +172,9 @@ class DumpAgentV3:
             "ERROR": "!", "PHASE": "=", "DATA": ">"
         }
         symbol = symbols.get(level, "+")
-        print(f"[{timestamp}] [{symbol}] {msg}")
+        log_line = f"[{timestamp}] [{symbol}] {msg}"
+        print(log_line)
+        self._debug(f"[{level}] {msg}")
     
     def _phase_header(self, title: str):
         """Print phase header."""
@@ -164,6 +182,7 @@ class DumpAgentV3:
         print("=" * 60)
         print(f"  {title}")
         print("=" * 60)
+        self._debug(f"\n{'='*60}\n  PHASE: {title}\n{'='*60}")
     
     def _execute_tool(self, tool_name: str, **params) -> Optional[Any]:
         """Execute a tool and record in memory."""
@@ -175,7 +194,12 @@ class DumpAgentV3:
         if self.verbose:
             self._log(f"Executing: {tool_name}", "INFO")
         
+        self._debug(f"TOOL_EXEC: {tool_name} params={json.dumps(params, default=str)}")
         result = tool.execute(**params)
+        self._debug(f"TOOL_RESULT: {tool_name} success={result.success} time={result.execution_time:.1f}s")
+        if result.success and result.data:
+            data_preview = str(result.data)[:500]
+            self._debug(f"TOOL_DATA: {data_preview}")
         
         self.memory.add_action(
             tool=tool_name,
@@ -223,6 +247,9 @@ class DumpAgentV3:
         
         injection_analysis = self.planner.analyze_injection(result.raw_output)
         
+        self._debug(f"INJECTION_ANALYSIS: {json.dumps(injection_analysis, default=str)}")
+        self._debug(f"RAW_OUTPUT_PREVIEW: {result.raw_output[:2000] if result.raw_output else 'None'}")
+        
         self.memory.injection_type = injection_analysis.get("injection_type", "unknown")
         self._log(f"Injection: {self.memory.injection_type}", "AI")
         
@@ -268,6 +295,8 @@ class DumpAgentV3:
             injection_analysis.get("is_slow") or 
             self.strategy_manager.current_strategy == Strategy.SMART_SEARCH
         )
+        
+        self._debug(f"SMART_SEARCH_DECISION: is_slow={injection_analysis.get('is_slow')} strategy={self.strategy_manager.current_strategy} use_smart_search={use_smart_search}")
         
         if use_smart_search:
             self._log("AI using Smart Search (optimized for slow injection)", "AI")
@@ -418,11 +447,16 @@ class DumpAgentV3:
         self._save_results()
         
         self._print_summary()
+        
+        if self._debug_file:
+            self._debug(f"=== DumpAI Debug Log Ended: {datetime.now().isoformat()} ===")
+            self._debug_file.close()
     
     def _smart_search_tables(self, database: str) -> List[str]:
         """AI-optimized Smart Search for slow injections."""
         patterns = self._get_search_patterns()
         
+        self._debug(f"SMART_SEARCH: patterns={patterns}")
         self._log(f"Searching {len(patterns)} patterns", "INFO")
         
         result = self._execute_tool(
@@ -432,14 +466,18 @@ class DumpAgentV3:
             max_workers=self.max_parallel
         )
         
+        self._debug(f"SMART_SEARCH_RESULT: success={result.success if result else False} data={result.data if result else None}")
+        
         if result and result.success and result.data:
             tables = []
             for item in result.data:
                 table_name = item.split('.')[-1] if '.' in item else item
                 if table_name not in tables:
                     tables.append(table_name)
+            self._debug(f"SMART_SEARCH_TABLES: {tables}")
             return tables
         
+        self._debug(f"SMART_SEARCH_FAILED: error={result.error if result else 'No result'}")
         self._log("Smart search failed, falling back to enumeration", "ERROR")
         result = self._execute_tool("enumerate_tables", database=database)
         return result.data if result and result.success else []
