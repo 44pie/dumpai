@@ -41,13 +41,24 @@ class BaseTool:
         """Build SQLMap command with extra arguments."""
         cmd = self.base_cmd
         
+        # Replace sqlmap with full path
         if "sqlmap" in cmd and SQLMAP_PATH and os.path.exists(SQLMAP_PATH):
-            cmd = cmd.replace("sqlmap ", f"python3 {SQLMAP_PATH} ")
+            if cmd.startswith("sqlmap "):
+                cmd = f"python3 {SQLMAP_PATH} " + cmd[7:]
+            else:
+                cmd = cmd.replace("sqlmap ", f"python3 {SQLMAP_PATH} ")
         
         if "--batch" not in cmd:
             cmd += " --batch"
         
-        cmd += " " + " ".join(extra_args)
+        # Add --ignore-stdin for subprocess compatibility
+        if "--ignore-stdin" not in cmd:
+            cmd += " --ignore-stdin"
+        
+        # Add extra args
+        for arg in extra_args:
+            cmd += f" {arg}"
+        
         return cmd
     
     def _run_cmd(self, cmd: str) -> tuple:
