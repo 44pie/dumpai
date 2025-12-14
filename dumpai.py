@@ -92,6 +92,9 @@ Examples:
     parser.add_argument("--resume", metavar="SESSION_FILE",
                         help="Resume from saved session file")
     
+    parser.add_argument("--debug", metavar="LOG_FILE",
+                        help="Enable debug logging to file (full verbose)")
+    
     args = parser.parse_args()
     
     if args.resume:
@@ -136,7 +139,8 @@ Examples:
             verbose=args.verbose,
             max_rows=args.max_rows,
             cms_override=args.cms,
-            prefix_override=args.prefix
+            prefix_override=args.prefix,
+            debug_log=args.debug
         )
         
         agent.run()
