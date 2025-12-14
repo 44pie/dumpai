@@ -180,7 +180,13 @@ class BaseTool:
         cmd = self.base_cmd
         
         if "sqlmap" in cmd and SQLMAP_PATH and os.path.exists(SQLMAP_PATH):
-            if cmd.startswith("sqlmap "):
+            import re
+            match = re.search(r'(.*?)(python3\s+\S*sqlmap\.py|sqlmap)\s', cmd)
+            if match:
+                prefix = match.group(1)
+                sqlmap_part = cmd[match.end()-1:]
+                cmd = f"{prefix}python3 {SQLMAP_PATH} {sqlmap_part}"
+            elif cmd.startswith("sqlmap "):
                 cmd = f"python3 {SQLMAP_PATH} " + cmd[7:]
             else:
                 cmd = cmd.replace("sqlmap ", f"python3 {SQLMAP_PATH} ")
