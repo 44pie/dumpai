@@ -67,14 +67,36 @@ class BaseTool:
             print(f"[*] CMD: {cmd}")
         
         try:
-            result = subprocess.run(
-                cmd,
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=self.timeout
-            )
-            return result.stdout, result.stderr, result.returncode
+            if self.verbose:
+                # Stream output in real-time for verbose mode
+                process = subprocess.Popen(
+                    cmd,
+                    shell=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1
+                )
+                
+                output_lines = []
+                for line in iter(process.stdout.readline, ''):
+                    if line:
+                        print(line, end='', flush=True)
+                        output_lines.append(line)
+                
+                process.wait(timeout=self.timeout)
+                output = ''.join(output_lines)
+                return output, "", process.returncode
+            else:
+                # Capture output silently
+                result = subprocess.run(
+                    cmd,
+                    shell=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=self.timeout
+                )
+                return result.stdout, result.stderr, result.returncode
         except subprocess.TimeoutExpired:
             return "", "Timeout expired", -1
         except Exception as e:
