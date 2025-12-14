@@ -24,7 +24,7 @@ try:
     from .strategy import StrategyManager, Strategy
     from .tools import (
         EnumerateDBs, EnumerateTables, GetColumns, SearchTables, SearchColumns,
-        DumpTable, DumpColumns, AnalyzeSchema, AnalyzeColumns
+        DumpTable, DumpColumns, AnalyzeSchema, AnalyzeColumns, ParallelTableDumper
     )
     from .cms_strategies import (
         detect_cms_from_tables, get_extraction_plan, detect_prefix, get_cms_info
@@ -35,7 +35,7 @@ except ImportError:
     from strategy import StrategyManager, Strategy
     from tools import (
         EnumerateDBs, EnumerateTables, GetColumns, SearchTables, SearchColumns,
-        DumpTable, DumpColumns, AnalyzeSchema, AnalyzeColumns
+        DumpTable, DumpColumns, AnalyzeSchema, AnalyzeColumns, ParallelTableDumper
     )
     from cms_strategies import (
         detect_cms_from_tables, get_extraction_plan, detect_prefix, get_cms_info
@@ -99,6 +99,14 @@ class DumpAgentV3:
         )
         
         self._init_tools()
+        
+        self.parallel_dumper = ParallelTableDumper(
+            config=self.config,
+            verbose=verbose,
+            max_table_workers=min(3, max_parallel),
+            max_column_workers=max_parallel,
+            output_base=output_dir
+        )
         
         self.round_num = 0
         self.max_rounds = 200
@@ -330,83 +338,64 @@ class DumpAgentV3:
             self._log("No extraction targets identified", "ERROR")
             return
         
-        self._phase_header("PHASE 5: AI-GUIDED EXTRACTION")
+        self._phase_header("PHASE 5: AI-GUIDED PARALLEL EXTRACTION")
         
         total_rows = 0
         
-        for table, suggested_cols in extraction_plan.items():
-            self._log(f"Processing: {table}", "INFO")
-            self.round_num += 1
-            
-            if self.round_num > self.max_rounds:
-                self._log("Max rounds reached", "ERROR")
-                break
+        columns_map = {}
+        tables_to_dump = list(extraction_plan.keys())
+        
+        self._log(f"Preparing {len(tables_to_dump)} tables for parallel extraction", "INFO")
+        
+        for table in tables_to_dump[:20]:
+            suggested_cols = extraction_plan.get(table, [])
             
             col_result = self._execute_tool("get_columns", database=database, table=table)
             
-            if not col_result or not col_result.success:
-                dump_result = self._execute_tool(
-                    "dump_table", database=database, table=table, max_rows=self.max_rows
-                )
-                if dump_result and dump_result.success and dump_result.data:
-                    self._add_extracted_data(table, dump_result.data)
-                    total_rows += len(dump_result.data)
-                continue
-            
-            all_columns = col_result.data
-            self.memory.columns_cache[table] = all_columns
-            
-            column_selection = self.planner.select_extraction_columns(
-                table=table,
-                columns=all_columns,
-                categories=self.categories,
-                context=self.memory.get_context_for_ai()
-            )
-            
-            if column_selection and column_selection.get("extractions"):
-                for ext in column_selection["extractions"]:
-                    cols = ext.get("columns", [])
-                    category = ext.get("category", "")
-                    
-                    if not cols:
-                        continue
-                    
-                    valid_cols = [c for c in cols if c in all_columns]
-                    if not valid_cols:
-                        continue
-                    
-                    self._log(f"  -> Extracting {valid_cols} for {category}", "AI")
-                    
-                    dump_result = self._execute_tool(
-                        "dump_columns",
-                        database=database,
-                        table=table,
-                        columns=valid_cols,
-                        max_rows=self.max_rows
-                    )
-                    
-                    if dump_result and dump_result.success and dump_result.data:
-                        self._add_extracted_data(table, dump_result.data, category)
-                        total_rows += len(dump_result.data)
-                        self._log(f"  -> Extracted {len(dump_result.data)} rows", "DATA")
-            else:
-                if suggested_cols:
-                    cols = [c for c in suggested_cols if c in all_columns]
-                else:
-                    cols = all_columns[:10]
+            if col_result and col_result.success and col_result.data:
+                all_columns = col_result.data
+                self.memory.columns_cache[table] = all_columns
                 
-                if cols:
-                    dump_result = self._execute_tool(
-                        "dump_columns",
-                        database=database,
-                        table=table,
-                        columns=cols,
-                        max_rows=self.max_rows
-                    )
-                    
-                    if dump_result and dump_result.success and dump_result.data:
-                        self._add_extracted_data(table, dump_result.data)
-                        total_rows += len(dump_result.data)
+                column_selection = self.planner.select_extraction_columns(
+                    table=table,
+                    columns=all_columns,
+                    categories=self.categories,
+                    context=self.memory.get_context_for_ai()
+                )
+                
+                if column_selection and column_selection.get("extractions"):
+                    cols = []
+                    for ext in column_selection["extractions"]:
+                        ext_cols = ext.get("columns", [])
+                        valid_cols = [c for c in ext_cols if c in all_columns]
+                        cols.extend(valid_cols)
+                    columns_map[table] = list(set(cols)) if cols else all_columns[:10]
+                elif suggested_cols:
+                    columns_map[table] = [c for c in suggested_cols if c in all_columns][:10]
+                else:
+                    columns_map[table] = all_columns[:10]
+            else:
+                columns_map[table] = []
+        
+        self._log(f"Starting PARALLEL dump of {len(columns_map)} tables", "INFO")
+        self._log(f"  Table workers: {self.parallel_dumper.max_table_workers}", "INFO")
+        self._log(f"  Column workers: {self.parallel_dumper.max_column_workers}", "INFO")
+        
+        results = self.parallel_dumper.dump_tables_parallel(
+            database=database,
+            tables=list(columns_map.keys()),
+            columns_map=columns_map,
+            max_rows=self.max_rows
+        )
+        
+        for table, result in results.items():
+            if result.success and result.data:
+                category = self.categories[0] if self.categories else "user_data"
+                self._add_extracted_data(table, result.data, category)
+                total_rows += len(result.data)
+                self._log(f"  [OK] {table}: {len(result.data)} rows", "DATA")
+            else:
+                self._log(f"  [FAIL] {table}: {result.error}", "ERROR")
             
             self.memory.stats["tables_processed"] += 1
         
