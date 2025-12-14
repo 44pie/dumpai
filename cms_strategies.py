@@ -449,14 +449,21 @@ def detect_cms_from_tables(tables: List[str]) -> Optional[str]:
         score = 0
         
         for detection_table in strategy.detection_tables:
-            base_name = detection_table.replace(strategy.default_prefix, "")
+            if detection_table.lower() in tables_lower:
+                score += 10
+            prefixed_name = detection_table.lower()
             for t in tables_lower:
-                if base_name in t or detection_table.lower() in t:
+                if t == prefixed_name:
                     score += 10
+                elif t.startswith(strategy.default_prefix.lower()):
+                    base_name = detection_table.replace(strategy.default_prefix, "")
+                    if t.endswith(base_name.lower()):
+                        score += 5
         
-        for pattern in strategy.detection_patterns:
-            if pattern.lower() in tables_str:
-                score += 5
+        if strategy.default_prefix:
+            prefix_count = sum(1 for t in tables_lower if t.startswith(strategy.default_prefix.lower()))
+            if prefix_count >= 3:
+                score += prefix_count * 2
         
         if score > 0:
             scores[cms_name] = score
