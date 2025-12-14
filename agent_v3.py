@@ -347,6 +347,7 @@ class DumpAgentV3:
         
         self._log(f"Preparing {len(tables_to_dump)} tables for parallel extraction", "INFO")
         
+        failed_tables = []
         for table in tables_to_dump[:20]:
             suggested_cols = extraction_plan.get(table, [])
             
@@ -375,7 +376,19 @@ class DumpAgentV3:
                 else:
                     columns_map[table] = all_columns[:10]
             else:
-                columns_map[table] = []
+                failed_tables.append(table)
+                self._log(f"  [SKIP] {table}: no columns found (table may not exist)", "WARN")
+        
+        if failed_tables and len(failed_tables) == len(tables_to_dump[:20]):
+            self._log("All CMS tables failed! Falling back to discovered tables...", "WARN")
+            fallback_tables = [t for t in self.memory.tables if t not in failed_tables][:10]
+            for table in fallback_tables:
+                col_result = self._execute_tool("get_columns", database=database, table=table)
+                if col_result and col_result.success and col_result.data:
+                    columns_map[table] = col_result.data[:10]
+                    self.memory.columns_cache[table] = col_result.data
+        
+        columns_map = {k: v for k, v in columns_map.items() if v}
         
         self._log(f"Starting PARALLEL dump of {len(columns_map)} tables", "INFO")
         self._log(f"  Table workers: {self.parallel_dumper.max_table_workers}", "INFO")
