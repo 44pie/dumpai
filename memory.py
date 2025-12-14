@@ -1,9 +1,10 @@
-"""Memory management for DumpAI Agent."""
+"""Memory management for DumpAI Agent - Thread-Safe."""
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 import json
 import os
+import threading
 
 
 @dataclass
@@ -85,10 +86,11 @@ class Memory:
                 "api_key": [],
                 "sys_data": []
             }
+        self._lock = threading.Lock()
     
     def add_action(self, tool: str, params: Dict, result: Any, 
                    success: bool, execution_time: float):
-        """Add action to history."""
+        """Add action to history (thread-safe)."""
         action = Action(
             timestamp=datetime.now().isoformat(),
             tool=tool,
@@ -97,20 +99,22 @@ class Memory:
             success=success,
             execution_time=execution_time
         )
-        self.history.append(action)
-        self.stats["commands_run"] += 1
+        with self._lock:
+            self.history.append(action)
+            self.stats["commands_run"] += 1
     
     def add_error(self, tool: str, error: str, context: Dict = None):
-        """Add error to log."""
-        self.errors.append({
-            "timestamp": datetime.now().isoformat(),
-            "tool": tool,
-            "error": error,
-            "context": context or {}
-        })
+        """Add error to log (thread-safe)."""
+        with self._lock:
+            self.errors.append({
+                "timestamp": datetime.now().isoformat(),
+                "tool": tool,
+                "error": error,
+                "context": context or {}
+            })
     
     def add_hypothesis(self, type: str, value: str, confidence: float, source: str):
-        """Add AI hypothesis about target."""
+        """Add AI hypothesis about target (thread-safe)."""
         h = Hypothesis(
             type=type,
             value=value,
@@ -118,44 +122,49 @@ class Memory:
             source=source,
             timestamp=datetime.now().isoformat()
         )
-        self.hypotheses.append(h)
+        with self._lock:
+            self.hypotheses.append(h)
     
     def add_issue(self, issue_type: str, description: str, 
                   resolution: str = "", resolved: bool = False):
-        """Log an issue with optional resolution."""
-        self.issue_log.append({
-            "timestamp": datetime.now().isoformat(),
-            "type": issue_type,
-            "description": description,
-            "resolution": resolution,
-            "resolved": resolved
-        })
-        self.stats["retries"] += 1
+        """Log an issue with optional resolution (thread-safe)."""
+        with self._lock:
+            self.issue_log.append({
+                "timestamp": datetime.now().isoformat(),
+                "type": issue_type,
+                "description": description,
+                "resolution": resolution,
+                "resolved": resolved
+            })
+            self.stats["retries"] += 1
     
     def update_table_score(self, table: str, score: float, reason: str = ""):
-        """Update utility score for a table."""
-        self.table_scores[table] = score
+        """Update utility score for a table (thread-safe)."""
+        with self._lock:
+            self.table_scores[table] = score
     
     def log_strategy_change(self, old_strategy: str, new_strategy: str, reason: str):
-        """Log a strategy change."""
-        self.strategy_history.append({
-            "timestamp": datetime.now().isoformat(),
-            "from": old_strategy,
-            "to": new_strategy,
-            "reason": reason
-        })
-        self.stats["strategy_changes"] += 1
+        """Log a strategy change (thread-safe)."""
+        with self._lock:
+            self.strategy_history.append({
+                "timestamp": datetime.now().isoformat(),
+                "from": old_strategy,
+                "to": new_strategy,
+                "reason": reason
+            })
+            self.stats["strategy_changes"] += 1
     
     def add_extracted_data(self, category: str, rows: List[Dict], 
                            source_table: str = ""):
-        """Add extracted data."""
+        """Add extracted data (thread-safe)."""
         for row in rows:
             row["_source_table"] = source_table
             row["_extracted_at"] = datetime.now().isoformat()
         
-        if category in self.extracted_data:
-            self.extracted_data[category].extend(rows)
-            self.stats["rows_extracted"] += len(rows)
+        with self._lock:
+            if category in self.extracted_data:
+                self.extracted_data[category].extend(rows)
+                self.stats["rows_extracted"] += len(rows)
     
     def get_context_for_ai(self, max_items: int = 10) -> str:
         """Get compressed context for AI prompts."""
