@@ -96,7 +96,7 @@ class AgentLoop:
         self.memory = Memory()
         self.memory.current_database = config.get("database", "")
         
-        self.planner = Planner(verbose=verbose)
+        self.planner = Planner(verbosity=1 if verbose else 0)
         
         self.phase = AgentPhase.INIT
         self.round_num = 0
