@@ -4,7 +4,7 @@ DumpAI v3.0 - AI-Powered Autonomous Data Extractor
 
 Full AI Integration inspired by hackingBuddyGPT:
 - AI makes decisions at EVERY stage
-- Reason → Act → Observe → Adapt cycle
+- Reason -> Act -> Observe -> Adapt cycle
 - Dynamic strategy adaptation
 - Intelligent error recovery
 
@@ -46,6 +46,11 @@ Categories:
 
 Default: --user-data --api-key --sys-data
 
+Verbosity Levels:
+  (none)          Minimal output - phases and results only
+  -v              Show AI reasoning summaries and key decisions
+  -vv             Full AI reasoning, all decisions, debug info
+
 v3.0 Features:
   - AI at every stage (not just CMS detection)
   - Dynamic strategy adaptation
@@ -54,7 +59,8 @@ v3.0 Features:
 
 Examples:
   python3 dumpai.py -c "sqlmap -r req.txt -p id"
-  python3 dumpai.py -c "sqlmap -r req.txt -p id" --all
+  python3 dumpai.py -c "sqlmap -r req.txt -p id" -v
+  python3 dumpai.py -c "sqlmap -r req.txt -p id" -vv --all
   python3 dumpai.py -c "sqlmap -r req.txt -p id" --cms prestashop
         """
     )
@@ -79,8 +85,8 @@ Examples:
                         help="Output directory (default: dumpai_out)")
     parser.add_argument("-p", "--parallel", type=int, default=5,
                         help="Max parallel extractions (default: 5)")
-    parser.add_argument("-v", "--verbose", action="store_true",
-                        help="Verbose output")
+    parser.add_argument("-v", "--verbose", action="count", default=0,
+                        help="Verbose output (-v = AI reasoning, -vv = full debug)")
     parser.add_argument("-mr", "--max-rows", type=int, default=0,
                         help="Max rows to dump per table (0 = unlimited)")
     
@@ -93,7 +99,7 @@ Examples:
                         help="Resume from saved session file")
     
     parser.add_argument("--debug", metavar="LOG_FILE",
-                        help="Enable debug logging to file (full verbose)")
+                        help="Write all output to debug log file")
     
     args = parser.parse_args()
     
@@ -136,7 +142,7 @@ Examples:
             categories=categories,
             output_dir=args.output,
             max_parallel=args.parallel,
-            verbose=args.verbose,
+            verbosity=args.verbose,
             max_rows=args.max_rows,
             cms_override=args.cms,
             prefix_override=args.prefix,
