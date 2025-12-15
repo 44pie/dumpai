@@ -116,10 +116,10 @@ class StrategyManager:
     4. Track strategy effectiveness
     """
     
-    def __init__(self, planner: Planner, memory: Memory, verbose: bool = False):
+    def __init__(self, planner: Planner, memory: Memory, verbosity: int = 0):
         self.planner = planner
         self.memory = memory
-        self.verbose = verbose
+        self.verbosity = verbosity
         
         self.current_strategy = Strategy.FULL_ENUMERATION
         self.current_config = STRATEGY_CONFIGS[self.current_strategy]
@@ -146,15 +146,15 @@ class StrategyManager:
         
         if is_slow:
             self.current_strategy = Strategy.SMART_SEARCH
-            if self.verbose:
+            if self.verbosity >= 2:
                 print("[STRATEGY] Selected: SMART_SEARCH (slow injection)")
         elif waf_detected:
             self.current_strategy = Strategy.MINIMAL
-            if self.verbose:
+            if self.verbosity >= 2:
                 print("[STRATEGY] Selected: MINIMAL (WAF detected)")
         else:
             self.current_strategy = Strategy.FULL_ENUMERATION
-            if self.verbose:
+            if self.verbosity >= 2:
                 print("[STRATEGY] Selected: FULL_ENUMERATION (fast injection)")
         
         self.current_config = StrategyConfig(
@@ -166,7 +166,7 @@ class StrategyManager:
         if waf_detected:
             tampers = WAF_TAMPERS.get(self.dbms.lower(), WAF_TAMPERS["generic"])
             self.current_config.tamper_scripts = tampers[:2]
-            if self.verbose:
+            if self.verbosity >= 2:
                 print(f"[STRATEGY] WAF bypass tampers: {self.current_config.tamper_scripts}")
         
         self.memory.log_strategy_change(
@@ -201,7 +201,7 @@ class StrategyManager:
             reason=f"CMS detected: {cms_name}"
         )
         
-        if self.verbose:
+        if self.verbosity >= 2:
             print(f"[STRATEGY] Adapted to CMS: {cms_name}")
         
         return self.current_config
@@ -268,7 +268,7 @@ class StrategyManager:
             resolved=False
         )
         
-        if self.verbose:
+        if self.verbosity >= 1:
             print(f"[STRATEGY] Adapted to error: {adaptation}")
         
         return self.current_config, adaptation
