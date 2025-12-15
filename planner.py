@@ -114,8 +114,8 @@ AVAILABLE ACTIONS:
 - complete: Mission accomplished
 - abort: Critical failure, cannot proceed"""
     
-    def __init__(self, verbose: bool = False, max_tokens: int = 2000):
-        self.verbose = verbose
+    def __init__(self, verbosity: int = 0, max_tokens: int = 2000):
+        self.verbosity = verbosity
         self.max_tokens = max_tokens
         self.history: List[Tuple[str, str]] = []  # (prompt, response)
         self.total_tokens = 0
@@ -124,7 +124,7 @@ AVAILABLE ACTIONS:
     def _call_llm(self, prompt: str, system_override: str = None) -> Dict:
         """Call OpenAI API with structured output."""
         if not OPENAI_API_KEY:
-            if self.verbose:
+            if self.verbosity >= 1:
                 print("[!] No OPENAI_API_KEY - using fallback logic")
             return {}
         
@@ -160,12 +160,12 @@ AVAILABLE ACTIONS:
                 
                 return json.loads(content)
             else:
-                if self.verbose:
+                if self.verbosity >= 1:
                     print(f"[!] API error: {response.status_code}")
                 return {}
                 
         except Exception as e:
-            if self.verbose:
+            if self.verbosity >= 1:
                 print(f"[!] LLM call failed: {e}")
             return {}
     
@@ -196,12 +196,12 @@ AVAILABLE ACTIONS:
 Analyze and respond with JSON:
 {{
     "injection_type": "type from output",
-    "is_slow": true if blind/time-based,
+    "is_slow": false if UNION/error-based/stacked present (these are FAST), true ONLY if ONLY blind/time-based,
     "dbms": "detected DBMS",
     "waf_detected": true if WAF/IPS indicators,
-    "recommended_strategy": "smart_search for slow, full_enumeration for fast",
+    "recommended_strategy": "full_enumeration if UNION/error/stacked available, smart_search ONLY for pure blind",
     "tampers_suggested": ["list", "of", "tampers"] if WAF detected,
-    "speed_estimate": "fast|medium|slow",
+    "speed_estimate": "fast if UNION/error/stacked, slow if only blind/time-based",
     "reasoning": "brief explanation"
 }}"""
 
@@ -210,7 +210,7 @@ Analyze and respond with JSON:
         if not result:
             result = self._fallback_injection_analysis(sqlmap_output)
         
-        if self.verbose and result:
+        if self.verbosity >= 1 and result:
             print(f"[AI] Injection: {result.get('injection_type', '?')} ({result.get('speed_estimate', '?')})")
             if result.get('waf_detected'):
                 print(f"[AI] WAF detected! Suggested tampers: {result.get('tampers_suggested', [])}")
@@ -221,21 +221,38 @@ Analyze and respond with JSON:
         """Fallback pattern-based injection analysis."""
         output_lower = output.lower()
         
-        injection_type = "unknown"
-        is_slow = False
-        
+        # Detect ALL available injection types
+        types_found = []
+        if "union" in output_lower:
+            types_found.append("union")
+        if "error-based" in output_lower:
+            types_found.append("error_based")
+        if "stacked queries" in output_lower:
+            types_found.append("stacked")
+        if "boolean-based blind" in output_lower:
+            types_found.append("boolean_blind")
         if "time-based blind" in output_lower:
-            injection_type = "time_based"
-            is_slow = True
-        elif "boolean-based blind" in output_lower:
-            injection_type = "boolean_blind"
-            is_slow = True
-        elif "error-based" in output_lower:
-            injection_type = "error_based"
-        elif "union" in output_lower:
+            types_found.append("time_based")
+        
+        # Determine injection_type (prefer fastest)
+        if "union" in types_found:
             injection_type = "union"
-        elif "stacked queries" in output_lower:
+        elif "error_based" in types_found:
+            injection_type = "error_based"
+        elif "stacked" in types_found:
             injection_type = "stacked"
+        elif "boolean_blind" in types_found:
+            injection_type = "boolean_blind"
+        elif "time_based" in types_found:
+            injection_type = "time_based"
+        else:
+            injection_type = "unknown"
+        
+        # FAST techniques: union, error-based, stacked
+        # SLOW techniques: boolean-blind, time-based (only if no fast available)
+        fast_techniques = {"union", "error_based", "stacked"}
+        has_fast = bool(fast_techniques & set(types_found))
+        is_slow = not has_fast and len(types_found) > 0
         
         waf_detected = any(x in output_lower for x in [
             "waf/ips", "web application firewall", "blocked",
@@ -308,7 +325,7 @@ Only include tables that match requested categories. Sort by score descending.""
         
         if result and "prioritized_tables" in result:
             tables_list = result["prioritized_tables"]
-            if self.verbose:
+            if self.verbosity >= 1:
                 print(f"[AI] Prioritized {len(tables_list)} tables")
                 for t in tables_list[:5]:
                     print(f"     {t['score']:.2f} {t['table']}: {t['reason']}")
@@ -495,7 +512,7 @@ Respond with JSON:
 
         result = self._call_llm(prompt)
         
-        if self.verbose and result:
+        if self.verbosity >= 1 and result:
             if result.get("should_retry"):
                 print(f"[AI] Retry strategy: {result.get('reasoning', '')}")
             else:
@@ -546,7 +563,7 @@ Respond with JSON:
 
         result = self._call_llm(prompt)
         
-        if self.verbose and result:
+        if self.verbosity >= 1 and result:
             exts = result.get("extractions", [])
             if exts:
                 for ext in exts[:3]:
