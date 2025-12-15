@@ -271,6 +271,51 @@ class DumpAIConsole:
             for key, value in stats.items():
                 print(f"  {key}: {value}")
     
+    def show_extracted_data(self, data: Dict):
+        """Display extracted data preview."""
+        if not data:
+            return
+        
+        if self.use_rich:
+            for category, items in data.items():
+                if not items:
+                    continue
+                
+                self.console.print(f"\n[bold cyan]═══ {category.upper()} ═══[/bold cyan]")
+                
+                for item in items[:5]:
+                    source = item.get('source', 'unknown')
+                    rows = item.get('data', [])
+                    
+                    if rows:
+                        self.console.print(f"[yellow]Table:[/yellow] {source} ({len(rows)} rows)")
+                        
+                        table = Table(box=SIMPLE, show_header=True)
+                        
+                        if rows and isinstance(rows[0], dict):
+                            for col in list(rows[0].keys())[:6]:
+                                table.add_column(col, style="white", overflow="ellipsis", max_width=25)
+                            
+                            for row in rows[:10]:
+                                values = [str(row.get(k, ''))[:25] for k in list(rows[0].keys())[:6]]
+                                table.add_row(*values)
+                            
+                            self.console.print(table)
+                            
+                            if len(rows) > 10:
+                                self.console.print(f"  [dim]... and {len(rows) - 10} more rows[/dim]")
+        else:
+            for category, items in data.items():
+                if not items:
+                    continue
+                print(f"\n=== {category.upper()} ===")
+                for item in items[:5]:
+                    source = item.get('source', 'unknown')
+                    rows = item.get('data', [])
+                    print(f"  Table: {source} ({len(rows)} rows)")
+                    for row in rows[:5]:
+                        print(f"    {row}")
+    
     def error_panel(self, error: str, suggestion: str = None):
         """Display error with optional suggestion."""
         self._debug(f"ERROR: {error}")
