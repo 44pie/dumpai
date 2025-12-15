@@ -360,6 +360,12 @@ class DumpAgentV3:
             extraction_plan = {}
             for item in prioritized[:20]:
                 table = item["table"]
+                item_category = item.get("category", "")
+                
+                if item_category and item_category not in self.categories:
+                    self._debug(f"CATEGORY_FILTER: Skipping {table} (category={item_category} not in {self.categories})")
+                    continue
+                
                 self.memory.update_table_score(table, item["score"])
                 extraction_plan[table] = item.get("columns_hint", [])
         
