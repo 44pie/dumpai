@@ -562,13 +562,16 @@ class DumpAgentV3:
         strategy_stats = self.strategy_manager.get_stats()
         
         stats = {
-            "duration_sec": round(summary['duration'], 1),
-            "tables_processed": summary['tables_processed'],
-            "rows_extracted": summary['rows_extracted'],
-            "ai_calls": planner_stats['ai_calls'],
-            "ai_tokens": planner_stats['total_tokens'],
-            "strategy_changes": strategy_stats['strategy_changes'],
-            "final_strategy": strategy_stats['current_strategy']
+            "duration_sec": round(summary.get('duration', 0), 1),
+            "tables_processed": summary.get('tables_processed', 0),
+            "rows_extracted": summary.get('rows_extracted', 0),
+            "ai_calls": planner_stats.get('ai_calls', 0),
+            "ai_tokens": planner_stats.get('total_tokens', 0),
+            "strategy_changes": strategy_stats.get('strategy_changes', 0),
+            "final_strategy": strategy_stats.get('current_strategy', 'unknown')
         }
         
         self.console.summary_table(stats)
+        
+        # Show extracted data preview
+        self.console.show_extracted_data(self.memory.extracted_data)
