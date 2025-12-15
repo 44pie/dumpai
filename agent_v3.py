@@ -516,44 +516,33 @@ class DumpAgentV3:
         self.memory.add_extracted_data(category, rows, source_table=table)
     
     def _save_results(self):
-        """Save all results."""
-        planner_stats = self.planner.get_stats()
-        strategy_stats = self.strategy_manager.get_stats()
+        """Save extracted data only (clean output)."""
+        # Save each table as separate JSON file
+        for category, items in self.memory.extracted_data.items():
+            for item in items:
+                source = item.get('source', 'unknown')
+                rows = item.get('data', [])
+                
+                if rows:
+                    table_file = os.path.join(self.output_dir, f"{source}.json")
+                    with open(table_file, 'w') as f:
+                        json.dump(rows, f, indent=2, default=str)
         
-        output = {
-            "meta": {
-                "session_id": self.memory.session_id,
-                "timestamp": datetime.now().isoformat(),
-                "version": "3.0",
-                "database": self.memory.current_database,
-                "cms": self.memory.cms_detected,
-                "injection": self.memory.injection_type,
-                "duration": self.memory.stats.get("duration", 0),
-                "tables_processed": self.memory.stats["tables_processed"],
-                "rows_extracted": self.memory.stats["rows_extracted"]
-            },
-            "ai_stats": {
-                "ai_calls": planner_stats["ai_calls"],
-                "ai_tokens": planner_stats["total_tokens"],
-                "strategy_changes": strategy_stats["strategy_changes"],
-                "final_strategy": strategy_stats["current_strategy"]
-            },
-            "hypotheses": [
-                {"type": h.type, "value": h.value, "confidence": h.confidence}
-                for h in self.memory.hypotheses
-            ],
-            "data": self.memory.extracted_data,
-            "summary": self.memory.get_summary()
-        }
+        # Save combined results (data only)
+        combined = {}
+        for category, items in self.memory.extracted_data.items():
+            for item in items:
+                source = item.get('source', 'unknown')
+                rows = item.get('data', [])
+                if rows:
+                    combined[source] = rows
         
-        output_file = os.path.join(self.output_dir, "dump_all.json")
-        with open(output_file, 'w') as f:
-            json.dump(output, f, indent=2, default=str)
-        
-        self.console.log(f"Results saved: {output_file}", LogLevel.SUCCESS)
-        
-        session_file = os.path.join(self.output_dir, f"session_{self.memory.session_id}.json")
-        self.memory.save(session_file)
+        if combined:
+            output_file = os.path.join(self.output_dir, "dump_all.json")
+            with open(output_file, 'w') as f:
+                json.dump(combined, f, indent=2, default=str)
+            
+            self.console.log(f"Results saved: {output_file}", LogLevel.SUCCESS)
     
     def _print_summary(self):
         """Print extraction summary."""
