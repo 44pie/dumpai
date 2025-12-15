@@ -274,6 +274,19 @@ TABLES: {', '.join(tables[:50])}
 CONTEXT:
 {context}
 
+CRITICAL: Only return tables that match the CATEGORIES REQUESTED.
+Category definitions:
+- user_data: employee/admin/staff accounts (NOT customer accounts)
+- customer_data: customer/client personal info, addresses, orders
+- api_key: API keys, tokens, credentials, webservice accounts
+- sys_data: configuration, settings, connections
+- email_pass: email + password combinations
+
+IMPORTANT:
+- Tables with "address", "customer", "client", "order" belong to customer_data category ONLY
+- Do NOT include customer_data tables unless "customer_data" is in CATEGORIES REQUESTED
+- Do NOT include address tables unless "customer_data" is in CATEGORIES REQUESTED
+
 Score each relevant table from 0.0 to 1.0 based on:
 - 1.0: Critical (admin passwords, API keys)
 - 0.8+: High (employee accounts, system config)
@@ -283,13 +296,13 @@ Score each relevant table from 0.0 to 1.0 based on:
 Respond with JSON:
 {{
     "prioritized_tables": [
-        {{"table": "name", "score": 0.95, "category": "category", "reason": "why valuable", "columns_hint": ["suggested", "columns"]}}
+        {{"table": "name", "score": 0.95, "category": "must be one of {', '.join(categories)}", "reason": "why valuable", "columns_hint": ["suggested", "columns"]}}
     ],
     "cms_confidence": 0.0-1.0,
     "total_valuable_tables": N
 }}
 
-Only include tables with score > 0.3. Sort by score descending."""
+Only include tables that match requested categories. Sort by score descending."""
 
         result = self._call_llm(prompt)
         
@@ -305,23 +318,33 @@ Only include tables with score > 0.3. Sort by score descending."""
     
     def _fallback_table_prioritization(self, tables: List[str], 
                                         categories: List[str]) -> List[Dict]:
-        """Fallback pattern-based prioritization."""
+        """Fallback pattern-based prioritization with strict category matching."""
         patterns = {
-            "user_data": (["employee", "admin", "user", "staff", "login", "account"], 0.9),
-            "api_key": (["webservice", "api", "token", "oauth", "credential"], 0.95),
-            "sys_data": (["config", "setting", "connection", "server"], 0.8),
-            "customer_data": (["customer", "client", "address", "order"], 0.6),
-            "email_pass": (["user", "member", "account"], 0.85)
+            "user_data": (["employee", "admin", "staff", "admin_user", "user", "users", "account", "login"], 0.9),
+            "api_key": (["webservice", "api_key", "token", "oauth", "credential", "webservice_account", "api"], 0.95),
+            "sys_data": (["config", "setting", "connection", "server", "configuration", "option"], 0.8),
+            "customer_data": (["customer", "client", "address", "order", "cart"], 0.6),
+            "email_pass": (["employee", "admin_user", "users", "user", "member", "account"], 0.85)
         }
         
+        customer_only_patterns = ["customer", "client", "address", "order", "cart", "wishlist"]
+        
         results = []
+        seen_tables = set()
+        
         for table in tables:
             table_lower = table.lower()
+            
+            is_customer_table = any(p in table_lower for p in customer_only_patterns)
+            
             for cat in categories:
                 if cat in patterns:
+                    if is_customer_table and cat != "customer_data":
+                        continue
+                    
                     keywords, base_score = patterns[cat]
                     for kw in keywords:
-                        if kw in table_lower:
+                        if kw in table_lower and table not in seen_tables:
                             results.append({
                                 "table": table,
                                 "score": base_score,
@@ -329,6 +352,7 @@ Only include tables with score > 0.3. Sort by score descending."""
                                 "reason": f"Pattern match: {kw}",
                                 "columns_hint": []
                             })
+                            seen_tables.add(table)
                             break
         
         results.sort(key=lambda x: x["score"], reverse=True)
