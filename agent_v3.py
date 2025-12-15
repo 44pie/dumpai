@@ -3,7 +3,7 @@ DumpAI Agent v3.0 - Full AI Integration
 
 This is a complete rewrite following hackingBuddyGPT patterns:
 - AI makes decisions at EVERY stage (not just CMS detection)
-- Reason → Act → Observe → Adapt cycle
+- Reason -> Act -> Observe -> Adapt cycle
 - Dynamic strategy adaptation
 - Intelligent error recovery
 
@@ -29,6 +29,7 @@ try:
     from .cms_strategies import (
         detect_cms_from_tables, get_extraction_plan, detect_prefix, get_cms_info
     )
+    from .console import DumpAIConsole, LogLevel
 except ImportError:
     from memory import Memory
     from planner import Planner, ActionType, Observation, Decision
@@ -40,6 +41,7 @@ except ImportError:
     from cms_strategies import (
         detect_cms_from_tables, get_extraction_plan, detect_prefix, get_cms_info
     )
+    from console import DumpAIConsole, LogLevel
 
 
 BANNER = """
@@ -63,6 +65,7 @@ class DumpAgentV3:
     - StrategyManager: Adaptive strategy selection
     - Memory: Full context for AI reasoning
     - Tools: Action executors
+    - Console: Rich output with AI reasoning visibility
     
     Flow:
     1. INIT: Parse config, initialize components
@@ -70,11 +73,16 @@ class DumpAgentV3:
     3. PRIORITIZATION: AI scores tables by value
     4. EXTRACTION: AI guides targeted extraction
     5. ADAPTATION: AI handles errors, changes strategy
+    
+    Verbosity levels:
+    - 0: Minimal output (phases and results only)
+    - 1 (-v): Show AI reasoning summaries
+    - 2 (-vv): Full AI reasoning and all decisions
     """
     
     def __init__(self, command: str, categories: Optional[List[str]] = None,
                  output_dir: str = "dumpai_out", max_parallel: int = 5,
-                 verbose: bool = False, max_rows: int = 0,
+                 verbosity: int = 0, max_rows: int = 0,
                  cms_override: str = None, prefix_override: str = None,
                  debug_log: str = None):
         
@@ -82,37 +90,33 @@ class DumpAgentV3:
         self.categories = categories or ["user_data", "api_key", "sys_data"]
         self.output_dir = output_dir
         self.max_parallel = max_parallel
-        self.verbose = verbose
+        self.verbosity = verbosity
         self.max_rows = max_rows
         self.cms_override = cms_override
         self.prefix_override = prefix_override
-        self.debug_log = debug_log
-        self._debug_file = None
         
-        if debug_log:
-            self._debug_file = open(debug_log, "w", buffering=1)
-            self._debug(f"=== DumpAI Debug Log Started: {datetime.now().isoformat()} ===")
-            self._debug(f"Command: {command}")
-            self._debug(f"Categories: {categories}")
-            self._debug(f"Config: {json.dumps(self.config, indent=2)}")
+        self.console = DumpAIConsole(
+            verbosity=verbosity,
+            debug_file=debug_log
+        )
         
         os.makedirs(output_dir, exist_ok=True)
         
         self.memory = Memory()
         self.memory.current_database = self.config.get("database", "")
         
-        self.planner = Planner(verbose=verbose)
+        self.planner = Planner(verbosity=verbosity)
         self.strategy_manager = StrategyManager(
             planner=self.planner,
             memory=self.memory,
-            verbose=verbose
+            verbosity=verbosity
         )
         
         self._init_tools()
         
         self.parallel_dumper = ParallelTableDumper(
             config=self.config,
-            verbose=verbose,
+            verbose=verbosity > 0,
             max_table_workers=min(3, max_parallel),
             max_column_workers=max_parallel,
             output_base=output_dir
@@ -146,60 +150,33 @@ class DumpAgentV3:
     
     def _init_tools(self):
         """Initialize all tools."""
+        verbose = self.verbosity > 0
         self.tools = {
-            "enumerate_dbs": EnumerateDBs(self.config, verbose=self.verbose),
-            "enumerate_tables": EnumerateTables(self.config, verbose=self.verbose),
-            "get_columns": GetColumns(self.config, verbose=self.verbose),
-            "search_tables": SearchTables(self.config, verbose=self.verbose),
-            "search_columns": SearchColumns(self.config, verbose=self.verbose),
-            "dump_table": DumpTable(self.config, verbose=self.verbose),
-            "dump_columns": DumpColumns(self.config, verbose=self.verbose),
-            "analyze_schema": AnalyzeSchema(self.config, verbose=self.verbose),
-            "analyze_columns": AnalyzeColumns(self.config, verbose=self.verbose)
+            "enumerate_dbs": EnumerateDBs(self.config, verbose=verbose),
+            "enumerate_tables": EnumerateTables(self.config, verbose=verbose),
+            "get_columns": GetColumns(self.config, verbose=verbose),
+            "search_tables": SearchTables(self.config, verbose=verbose),
+            "search_columns": SearchColumns(self.config, verbose=verbose),
+            "dump_table": DumpTable(self.config, verbose=verbose),
+            "dump_columns": DumpColumns(self.config, verbose=verbose),
+            "analyze_schema": AnalyzeSchema(self.config, verbose=verbose),
+            "analyze_columns": AnalyzeColumns(self.config, verbose=verbose)
         }
-    
-    def _debug(self, msg: str):
-        """Write to debug log file."""
-        if self._debug_file:
-            timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-            self._debug_file.write(f"[{timestamp}] {msg}\n")
-    
-    def _log(self, msg: str, level: str = "INFO"):
-        """Log with timestamp."""
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        symbols = {
-            "INFO": "+", "AI": "*", "SUCCESS": "+", 
-            "ERROR": "!", "PHASE": "=", "DATA": ">"
-        }
-        symbol = symbols.get(level, "+")
-        log_line = f"[{timestamp}] [{symbol}] {msg}"
-        print(log_line)
-        self._debug(f"[{level}] {msg}")
-    
-    def _phase_header(self, title: str):
-        """Print phase header."""
-        print()
-        print("=" * 60)
-        print(f"  {title}")
-        print("=" * 60)
-        self._debug(f"\n{'='*60}\n  PHASE: {title}\n{'='*60}")
     
     def _execute_tool(self, tool_name: str, **params) -> Optional[Any]:
         """Execute a tool and record in memory."""
         tool = self.tools.get(tool_name)
         if not tool:
-            self._log(f"Unknown tool: {tool_name}", "ERROR")
+            self.console.log(f"Unknown tool: {tool_name}", LogLevel.ERROR)
             return None
         
-        if self.verbose:
-            self._log(f"Executing: {tool_name}", "INFO")
+        self.round_num += 1
+        self.console.round_start(self.round_num, tool_name, params)
         
-        self._debug(f"TOOL_EXEC: {tool_name} params={json.dumps(params, default=str)}")
         result = tool.execute(**params)
-        self._debug(f"TOOL_RESULT: {tool_name} success={result.success} time={result.execution_time:.1f}s")
-        if result.success and result.data:
-            data_preview = str(result.data)[:500]
-            self._debug(f"TOOL_DATA: {data_preview}")
+        
+        summary = f"{len(result.data)} items" if result.success and result.data else result.error or "No data"
+        self.console.round_result(result.success, summary, result.data)
         
         self.memory.add_action(
             tool=tool_name,
@@ -218,7 +195,10 @@ class DumpAgentV3:
             )
             
             if adaptation.get("strategy_change"):
-                self._log(f"Strategy changed to: {adaptation['strategy_change']}", "AI")
+                self.console.ai_reason(
+                    reasoning=adaptation.get("reasoning", "Error detected, changing strategy"),
+                    decision=f"Switch to {adaptation['strategy_change']}"
+                )
         else:
             self.strategy_manager.report_success()
         
@@ -229,35 +209,38 @@ class DumpAgentV3:
         print(BANNER)
         start_time = time.time()
         
-        self._phase_header("AUTONOMOUS AI AGENT")
-        self._log(f"Request: {self.config['request_file']}")
-        self._log(f"Categories: {', '.join(self.categories)}")
-        self._log(f"Output: {self.output_dir}")
-        print()
+        self.console.phase("AUTONOMOUS AI AGENT")
+        self.console.log(f"Request: {self.config['request_file']}")
+        self.console.log(f"Categories: {', '.join(self.categories)}")
+        self.console.log(f"Output: {self.output_dir}")
+        if self.verbosity >= 1:
+            self.console.log(f"Verbosity: {self.verbosity}")
         
-        self._phase_header("PHASE 1: INJECTION ANALYSIS")
+        self.console.phase("PHASE 1: INJECTION ANALYSIS")
         
         database = self.config.get("database")
         
         result = self._execute_tool("enumerate_dbs")
         
         if not result or not result.success:
-            self._log("Failed to probe target", "ERROR")
+            self.console.error_panel(
+                "Failed to probe target",
+                "Check if the target is reachable and SQLMap command is correct"
+            )
             return
         
         injection_analysis = self.planner.analyze_injection(result.raw_output)
         
-        self._debug(f"INJECTION_ANALYSIS: {json.dumps(injection_analysis, default=str)}")
-        self._debug(f"RAW_OUTPUT_PREVIEW: {result.raw_output[:2000] if result.raw_output else 'None'}")
+        self.console.injection_analysis(injection_analysis)
         
         self.memory.injection_type = injection_analysis.get("injection_type", "unknown")
-        self._log(f"Injection: {self.memory.injection_type}", "AI")
         
-        if injection_analysis.get("is_slow"):
-            self._log("Slow injection detected - AI will optimize queries", "AI")
-        
-        if injection_analysis.get("waf_detected"):
-            self._log("WAF detected - AI will select bypass tampers", "AI")
+        if injection_analysis.get("reasoning"):
+            self.console.ai_reason(
+                reasoning=injection_analysis.get("reasoning", ""),
+                decision=injection_analysis.get("recommended_strategy", "continue"),
+                confidence=0.9 if injection_analysis.get("injection_type") != "unknown" else 0.5
+            )
         
         self.memory.add_hypothesis(
             type="injection",
@@ -268,7 +251,7 @@ class DumpAgentV3:
         
         self.strategy_manager.select_initial_strategy(injection_analysis)
         
-        self._phase_header("PHASE 2: DATABASE SELECTION")
+        self.console.phase("PHASE 2: DATABASE SELECTION")
         
         if not database:
             if result.data:
@@ -279,51 +262,61 @@ class DumpAgentV3:
                 
                 if user_dbs:
                     database = user_dbs[0]
-                    self._log(f"AI selected database: {database}", "AI")
+                    self.console.ai_reason(
+                        reasoning=f"Found {len(result.data)} databases. Filtering out system databases.",
+                        decision=f"Selected '{database}' as target (first user database)"
+                    )
                 else:
                     database = result.data[0]
-                    self._log(f"Using database: {database}", "INFO")
+                    self.console.log(f"Using database: {database}")
                 
                 self.memory.current_database = database
         else:
-            self._log(f"Database specified: {database}", "INFO")
+            self.console.log(f"Database specified: {database}")
             self.memory.current_database = database
         
-        self._phase_header("PHASE 3: TABLE DISCOVERY")
+        self.console.phase("PHASE 3: TABLE DISCOVERY")
         
         use_smart_search = (
             injection_analysis.get("is_slow") or 
             self.strategy_manager.current_strategy == Strategy.SMART_SEARCH
         )
         
-        self._debug(f"SMART_SEARCH_DECISION: is_slow={injection_analysis.get('is_slow')} strategy={self.strategy_manager.current_strategy} use_smart_search={use_smart_search}")
-        
         if use_smart_search:
-            self._log("AI using Smart Search (optimized for slow injection)", "AI")
+            self.console.ai_reason(
+                reasoning="Slow injection detected (time-based or boolean blind). Full enumeration would take too long.",
+                decision="Use Smart Search - search for specific table patterns instead of enumerating all"
+            )
             tables = self._smart_search_tables(database)
         else:
-            self._log("Full table enumeration", "INFO")
+            self.console.log("Full table enumeration", LogLevel.INFO)
             result = self._execute_tool("enumerate_tables", database=database)
             tables = result.data if result and result.success else []
         
         if not tables:
-            self._log("No tables found", "ERROR")
+            self.console.error_panel(
+                "No tables found",
+                "Target database may be empty or access is restricted"
+            )
             return
         
         self.memory.tables = tables
-        self._log(f"Discovered {len(tables)} tables", "SUCCESS")
+        self.console.log(f"Discovered {len(tables)} tables", LogLevel.SUCCESS)
         
-        self._phase_header("PHASE 4: AI CMS DETECTION & PRIORITIZATION")
+        self.console.phase("PHASE 4: AI CMS DETECTION & PRIORITIZATION")
         
         if self.cms_override:
             cms_detected = self.cms_override.lower()
-            self._log(f"CMS override: {cms_detected}", "INFO")
+            self.console.log(f"CMS override: {cms_detected}")
         else:
             cms_detected = detect_cms_from_tables(tables)
         
         if cms_detected:
             self.memory.cms_detected = cms_detected
-            self._log(f"CMS detected: {cms_detected}", "AI")
+            self.console.ai_reason(
+                reasoning=f"Table naming patterns match known CMS structure",
+                decision=f"Detected CMS: {cms_detected.upper()}"
+            )
             
             self.strategy_manager.adapt_to_cms(cms_detected)
             
@@ -335,12 +328,12 @@ class DumpAgentV3:
             )
             
             prefix = self.prefix_override or detect_prefix(tables, cms_detected)
-            self._log(f"Table prefix: {prefix}", "INFO")
+            self.console.log(f"Table prefix: {prefix}")
             
             cms_plan = get_extraction_plan(cms_detected, prefix, self.categories)
             
             if cms_plan:
-                self._log(f"CMS strategy: {len(cms_plan)} target tables", "AI")
+                self.console.log(f"CMS strategy: {len(cms_plan)} target tables", LogLevel.AI)
                 extraction_plan = cms_plan
             else:
                 extraction_plan = None
@@ -348,7 +341,7 @@ class DumpAgentV3:
             extraction_plan = None
         
         if not extraction_plan:
-            self._log("Using AI table prioritization", "AI")
+            self.console.log("Using AI table prioritization", LogLevel.AI)
             
             prioritized = self.planner.prioritize_tables(
                 tables=tables,
@@ -357,33 +350,39 @@ class DumpAgentV3:
                 context=self.memory.get_context_for_ai()
             )
             
+            self.console.table_priority(prioritized)
+            
             extraction_plan = {}
             for item in prioritized[:20]:
                 table = item["table"]
                 item_category = item.get("category", "")
                 
                 if item_category and item_category not in self.categories:
-                    self._debug(f"CATEGORY_FILTER: Skipping {table} (category={item_category} not in {self.categories})")
+                    if self.verbosity >= 2:
+                        self.console.log(f"Skip {table}: category {item_category} not requested", LogLevel.DEBUG)
                     continue
                 
                 self.memory.update_table_score(table, item["score"])
                 extraction_plan[table] = item.get("columns_hint", [])
         
         if not extraction_plan:
-            self._log("No extraction targets identified", "ERROR")
+            self.console.error_panel(
+                "No extraction targets identified",
+                "Try different categories or check table names"
+            )
             return
         
-        self._phase_header("PHASE 5: AI-GUIDED PARALLEL EXTRACTION")
+        self.console.phase("PHASE 5: AI-GUIDED PARALLEL EXTRACTION")
         
         total_rows = 0
         
         columns_map = {}
         tables_to_dump = list(extraction_plan.keys())
         
-        self._log(f"Preparing {len(tables_to_dump)} tables for parallel extraction", "INFO")
+        self.console.log(f"Preparing {len(tables_to_dump)} tables for extraction")
         
         failed_tables = []
-        for table in tables_to_dump[:20]:
+        for idx, table in enumerate(tables_to_dump[:20]):
             suggested_cols = extraction_plan.get(table, [])
             
             col_result = self._execute_tool("get_columns", database=database, table=table)
@@ -405,17 +404,24 @@ class DumpAgentV3:
                         ext_cols = ext.get("columns", [])
                         valid_cols = [c for c in ext_cols if c in all_columns]
                         cols.extend(valid_cols)
+                    
                     columns_map[table] = list(set(cols)) if cols else all_columns[:10]
+                    
+                    if self.verbosity >= 1 and column_selection.get("reasoning"):
+                        self.console.ai_reason(
+                            reasoning=column_selection.get("reasoning", ""),
+                            decision=f"Extract columns: {', '.join(columns_map[table][:5])}..."
+                        )
                 elif suggested_cols:
                     columns_map[table] = [c for c in suggested_cols if c in all_columns][:10]
                 else:
                     columns_map[table] = all_columns[:10]
             else:
                 failed_tables.append(table)
-                self._log(f"  [SKIP] {table}: no columns found (table may not exist)", "WARN")
+                self.console.log(f"SKIP {table}: no columns found", LogLevel.WARN)
         
         if failed_tables and len(failed_tables) == len(tables_to_dump[:20]):
-            self._log("All CMS tables failed! Falling back to discovered tables...", "WARN")
+            self.console.log("All CMS tables failed! Falling back...", LogLevel.WARN)
             fallback_tables = [t for t in self.memory.tables if t not in failed_tables][:10]
             for table in fallback_tables:
                 col_result = self._execute_tool("get_columns", database=database, table=table)
@@ -425,9 +431,9 @@ class DumpAgentV3:
         
         columns_map = {k: v for k, v in columns_map.items() if v}
         
-        self._log(f"Starting PARALLEL dump of {len(columns_map)} tables", "INFO")
-        self._log(f"  Table workers: {self.parallel_dumper.max_table_workers}", "INFO")
-        self._log(f"  Column workers: {self.parallel_dumper.max_column_workers}", "INFO")
+        self.console.log(f"Starting PARALLEL dump: {len(columns_map)} tables")
+        self.console.log(f"  Table workers: {self.parallel_dumper.max_table_workers}", LogLevel.DEBUG)
+        self.console.log(f"  Column workers: {self.parallel_dumper.max_column_workers}", LogLevel.DEBUG)
         
         results = self.parallel_dumper.dump_tables_parallel(
             database=database,
@@ -441,29 +447,26 @@ class DumpAgentV3:
                 category = self.categories[0] if self.categories else "user_data"
                 self._add_extracted_data(table, result.data, category)
                 total_rows += len(result.data)
-                self._log(f"  [OK] {table}: {len(result.data)} rows", "DATA")
+                self.console.log(f"OK {table}: {len(result.data)} rows", LogLevel.SUCCESS)
             else:
-                self._log(f"  [FAIL] {table}: {result.error}", "ERROR")
+                self.console.log(f"FAIL {table}: {result.error}", LogLevel.ERROR)
             
             self.memory.stats["tables_processed"] += 1
         
-        self._phase_header("EXTRACTION COMPLETE")
+        self.console.phase("EXTRACTION COMPLETE")
         
         self.memory.stats["duration"] = time.time() - start_time
         self._save_results()
         
         self._print_summary()
         
-        if self._debug_file:
-            self._debug(f"=== DumpAI Debug Log Ended: {datetime.now().isoformat()} ===")
-            self._debug_file.close()
+        self.console.close()
     
     def _smart_search_tables(self, database: str) -> List[str]:
         """AI-optimized Smart Search for slow injections."""
         patterns = self._get_search_patterns()
         
-        self._debug(f"SMART_SEARCH: patterns={patterns}")
-        self._log(f"Searching {len(patterns)} patterns", "INFO")
+        self.console.log(f"Searching {len(patterns)} patterns", LogLevel.DEBUG)
         
         result = self._execute_tool(
             "search_tables", 
@@ -472,19 +475,15 @@ class DumpAgentV3:
             max_workers=self.max_parallel
         )
         
-        self._debug(f"SMART_SEARCH_RESULT: success={result.success if result else False} data={result.data if result else None}")
-        
         if result and result.success and result.data:
             tables = []
             for item in result.data:
                 table_name = item.split('.')[-1] if '.' in item else item
                 if table_name not in tables:
                     tables.append(table_name)
-            self._debug(f"SMART_SEARCH_TABLES: {tables}")
             return tables
         
-        self._debug(f"SMART_SEARCH_FAILED: error={result.error if result else 'No result'}")
-        self._log("Smart search failed, falling back to enumeration", "ERROR")
+        self.console.log("Smart search failed, falling back to enumeration", LogLevel.WARN)
         result = self._execute_tool("enumerate_tables", database=database)
         return result.data if result and result.success else []
     
@@ -551,7 +550,7 @@ class DumpAgentV3:
         with open(output_file, 'w') as f:
             json.dump(output, f, indent=2, default=str)
         
-        self._log(f"Results saved: {output_file}", "SUCCESS")
+        self.console.log(f"Results saved: {output_file}", LogLevel.SUCCESS)
         
         session_file = os.path.join(self.output_dir, f"session_{self.memory.session_id}.json")
         self.memory.save(session_file)
@@ -562,24 +561,14 @@ class DumpAgentV3:
         planner_stats = self.planner.get_stats()
         strategy_stats = self.strategy_manager.get_stats()
         
-        self._log(f"Duration: {summary['duration']:.1f}s")
-        self._log(f"Tables processed: {summary['tables_processed']}")
-        self._log(f"Rows extracted: {summary['rows_extracted']}")
+        stats = {
+            "duration_sec": round(summary['duration'], 1),
+            "tables_processed": summary['tables_processed'],
+            "rows_extracted": summary['rows_extracted'],
+            "ai_calls": planner_stats['ai_calls'],
+            "ai_tokens": planner_stats['total_tokens'],
+            "strategy_changes": strategy_stats['strategy_changes'],
+            "final_strategy": strategy_stats['current_strategy']
+        }
         
-        print()
-        self._log("AI Statistics:", "AI")
-        self._log(f"  AI calls: {planner_stats['ai_calls']}")
-        self._log(f"  AI tokens: {planner_stats['total_tokens']}")
-        self._log(f"  Strategy changes: {strategy_stats['strategy_changes']}")
-        self._log(f"  Final strategy: {strategy_stats['current_strategy']}")
-        
-        if self.memory.hypotheses:
-            print()
-            self._log("AI Hypotheses:", "AI")
-            for h in self.memory.hypotheses:
-                self._log(f"  {h.type}: {h.value} ({h.confidence:.0%})")
-        
-        print()
-        for cat, count in summary["data_by_category"].items():
-            if count > 0:
-                self._log(f"{cat}: {count} records", "DATA")
+        self.console.summary_table(stats)
