@@ -365,8 +365,36 @@ class SearchTables(BaseTool):
             output = stdout + stderr
             
             tables = []
+            current_db = None
+            in_table_section = False
+            
             for line in output.split("\n"):
-                line_lower = line.lower()
+                line_stripped = line.strip()
+                line_lower = line_stripped.lower()
+                
+                if line_stripped.startswith("Database:"):
+                    current_db = line_stripped.split(":", 1)[1].strip()
+                    continue
+                
+                if re.match(r'\[\d+ tables?\]', line_stripped):
+                    in_table_section = True
+                    continue
+                
+                if in_table_section and line_stripped.startswith("|") and line_stripped.endswith("|"):
+                    table_name = line_stripped.strip("| ").strip()
+                    if table_name and not table_name.startswith("-") and table_name.lower() != "tables":
+                        if table_name.lower() not in IGNORE_TLDS and len(table_name) > 2:
+                            if current_db:
+                                table_ref = f"{current_db}.{table_name}"
+                            else:
+                                table_ref = table_name
+                            if table_ref not in tables:
+                                tables.append(table_ref)
+                
+                if line_stripped.startswith("+") and "-" in line_stripped and in_table_section:
+                    if tables:
+                        in_table_section = False
+                
                 if "found" in line_lower and "table" in line_lower:
                     match = re.search(r"'([^']+)'", line)
                     if match:
@@ -375,9 +403,20 @@ class SearchTables(BaseTool):
                         if len(parts) == 2:
                             db, tbl = parts
                             if tbl.lower() not in IGNORE_TLDS and len(tbl) > 2:
-                                tables.append(table_ref)
+                                if table_ref not in tables:
+                                    tables.append(table_ref)
                         elif len(parts) == 1 and len(table_ref) > 2:
-                            tables.append(table_ref)
+                            if table_ref not in tables:
+                                tables.append(table_ref)
+            
+            parsed = SQLMapOutputParser.parse_output_dir(output_dir)
+            if parsed.get("tables"):
+                for db, db_tables in parsed["tables"].items():
+                    for tbl in db_tables:
+                        if tbl.lower() not in IGNORE_TLDS and len(tbl) > 2:
+                            table_ref = f"{db}.{tbl}"
+                            if table_ref not in tables:
+                                tables.append(table_ref)
             
             return pattern, output, tables
         
