@@ -177,10 +177,10 @@ class BaseTool:
     
     def _build_cmd(self, extra_args: List[str], output_dir: str = None) -> str:
         """Build SQLMap command with extra arguments and output directory."""
+        import re
         cmd = self.base_cmd
         
         if "sqlmap" in cmd and SQLMAP_PATH and os.path.exists(SQLMAP_PATH):
-            import re
             match = re.search(r'(.*?)(python3\s+\S*sqlmap\.py|sqlmap)\s', cmd)
             if match:
                 prefix = match.group(1)
@@ -191,17 +191,22 @@ class BaseTool:
             else:
                 cmd = cmd.replace("sqlmap ", f"python3 {SQLMAP_PATH} ")
         
-        # Remove user's --output-dir to use our isolated directories
-        cmd = re.sub(r'--output-dir[=\s]+["\']?[^"\'\s]+["\']?\s*', '', cmd)
-        
         if "--batch" not in cmd:
             cmd += " --batch"
         
         if "--ignore-stdin" not in cmd:
             cmd += " --ignore-stdin"
         
+        # If output_dir provided, replace user's --output-dir or add new one
         if output_dir:
-            cmd += f" --output-dir={output_dir}"
+            if "--output-dir" in cmd:
+                cmd = re.sub(r'--output-dir[=\s]+["\']?[^"\'\s]+["\']?', f'--output-dir={output_dir}', cmd)
+            else:
+                cmd += f" --output-dir={output_dir}"
+        elif "--output-dir" not in cmd:
+            # Use temp dir if no output dir specified anywhere
+            temp_dir = tempfile.mkdtemp(prefix="sqlmap_")
+            cmd += f" --output-dir={temp_dir}"
         
         for arg in extra_args:
             cmd += f" {arg}"
