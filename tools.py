@@ -326,6 +326,20 @@ class BaseTool:
         for arg in extra_args:
             cmd += f" {arg}"
         
+        # Apply extra_flags from adaptive retry (WAF bypass, timeouts, etc.)
+        extra_flags = self.config.get("extra_flags", "")
+        if extra_flags:
+            cmd += f" {extra_flags}"
+        
+        # Apply threads override (e.g., for time-based techniques)
+        threads_override = self.config.get("threads_override")
+        if threads_override:
+            import re
+            if "--threads" in cmd:
+                cmd = re.sub(r'--threads[=\s]+\d+', f'--threads={threads_override}', cmd)
+            else:
+                cmd += f" --threads={threads_override}"
+        
         return cmd
     
     def _run_cmd(self, cmd: str, stream_output: bool = False) -> Tuple[str, str, int]:
