@@ -220,7 +220,21 @@ class DumpAgentV3:
             # Apply AI-suggested parameter changes
             new_params = ai_adaptation.get("new_params", {})
             if new_params:
+                # Handle add_flags specially - append to config for tools
+                if "add_flags" in new_params:
+                    existing = self.config.get("extra_flags", "")
+                    self.config["extra_flags"] = f"{existing} {new_params['add_flags']}".strip()
+                    del new_params["add_flags"]
+                if "threads_override" in new_params:
+                    self.config["threads_override"] = new_params["threads_override"]
+                    del new_params["threads_override"]
                 current_params.update(new_params)
+            
+            # Apply tamper script if suggested
+            if ai_adaptation.get("tamper_script"):
+                existing = self.config.get("extra_flags", "")
+                tamper = ai_adaptation["tamper_script"]
+                self.config["extra_flags"] = f"{existing} --tamper={tamper}".strip()
             
             # Apply technique override if suggested
             if ai_adaptation.get("technique_override"):
