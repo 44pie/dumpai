@@ -202,6 +202,7 @@ Analyze and respond with JSON:
     "recommended_strategy": "full_enumeration if UNION/error/stacked available, smart_search ONLY for pure blind",
     "tampers_suggested": ["list", "of", "tampers"] if WAF detected,
     "speed_estimate": "fast if UNION/error/stacked, slow if only blind/time-based",
+    "available_techniques": "SQLMap codes for detected techniques ordered fast-to-slow: U=Union, E=Error, S=Stacked, B=Boolean, T=Time (e.g. 'UEBT' if all except stacked)",
     "reasoning": "brief explanation"
 }}"""
 
@@ -209,6 +210,11 @@ Analyze and respond with JSON:
         
         if not result:
             result = self._fallback_injection_analysis(sqlmap_output)
+        else:
+            # Ensure available_techniques is always present by parsing from output if LLM didn't provide it
+            if not result.get("available_techniques"):
+                fallback = self._fallback_injection_analysis(sqlmap_output)
+                result["available_techniques"] = fallback.get("available_techniques", "")
         
         if self.verbosity >= 1 and result:
             print(f"[AI] Injection: {result.get('injection_type', '?')} ({result.get('speed_estimate', '?')})")
