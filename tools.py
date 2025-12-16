@@ -169,6 +169,13 @@ class BaseTool:
         self.base_cmd = config.get("base_cmd", "")
         self.output_base = output_base or tempfile.mkdtemp(prefix="sqlmap_")
         self._lock = threading.Lock()
+        self._user_output_dir = self._extract_user_output_dir()
+    
+    def _extract_user_output_dir(self) -> str:
+        """Extract user's --output-dir from base command if present."""
+        import re
+        match = re.search(r'--output-dir[=\s]+["\']?([^"\'\s]+)["\']?', self.base_cmd)
+        return match.group(1) if match else ""
     
     def _get_output_dir(self) -> str:
         """Get unique output directory for this run."""
@@ -176,7 +183,11 @@ class BaseTool:
         return os.path.join(self.output_base, f"run_{run_id}")
     
     def _build_cmd(self, extra_args: List[str], output_dir: str = None) -> str:
-        """Build SQLMap command with extra arguments and output directory."""
+        """Build SQLMap command with extra arguments.
+        
+        IMPORTANT: User's --output-dir is PRESERVED to use SQLMap's cached session.
+        Only adds temp output-dir if user didn't specify one.
+        """
         import re
         cmd = self.base_cmd
         
@@ -197,14 +208,8 @@ class BaseTool:
         if "--ignore-stdin" not in cmd:
             cmd += " --ignore-stdin"
         
-        # If output_dir provided, replace user's --output-dir or add new one
-        if output_dir:
-            if "--output-dir" in cmd:
-                cmd = re.sub(r'--output-dir[=\s]+["\']?[^"\'\s]+["\']?', f'--output-dir={output_dir}', cmd)
-            else:
-                cmd += f" --output-dir={output_dir}"
-        elif "--output-dir" not in cmd:
-            # Use temp dir if no output dir specified anywhere
+        # Only add temp output-dir if user didn't specify one
+        if "--output-dir" not in cmd:
             temp_dir = tempfile.mkdtemp(prefix="sqlmap_")
             cmd += f" --output-dir={temp_dir}"
         
@@ -595,8 +600,6 @@ class DumpColumns(BaseTool):
                      max_rows: int) -> ToolResult:
         """Dump all columns in single command."""
         start = time.time()
-        output_dir = self._get_output_dir()
-        os.makedirs(output_dir, exist_ok=True)
         
         args = ["--dump"]
         if database:
@@ -609,12 +612,14 @@ class DumpColumns(BaseTool):
         if max_rows > 0:
             args.append(f"--stop {max_rows}")
         
-        cmd = self._build_cmd(args, output_dir)
+        cmd = self._build_cmd(args)
         stdout, stderr, code = self._run_cmd(cmd, stream_output=self.verbose)
         
         output = stdout + stderr
         
-        parsed = SQLMapOutputParser.parse_output_dir(output_dir)
+        parsed = {}
+        if self._user_output_dir:
+            parsed = SQLMapOutputParser.parse_output_dir(self._user_output_dir)
         key = f"{database}.{table}" if database and table else ""
         rows = parsed.get("dump_data", {}).get(key, [])
         
@@ -639,9 +644,6 @@ class DumpColumns(BaseTool):
         errors = []
         
         def dump_single_column(col: str) -> Tuple[str, List[Dict], str, str]:
-            isolated_output = tempfile.mkdtemp(prefix=f"sqlmap_col_{col[:10]}_")
-            os.makedirs(isolated_output, exist_ok=True)
-            
             args = ["--dump"]
             if database:
                 args.append(f"-D {database}")
@@ -651,11 +653,13 @@ class DumpColumns(BaseTool):
             if max_rows > 0:
                 args.append(f"--stop {max_rows}")
             
-            cmd = self._build_cmd(args, isolated_output)
+            cmd = self._build_cmd(args)
             stdout, stderr, code = self._run_cmd(cmd, stream_output=False)
             output = stdout + stderr
             
-            parsed = SQLMapOutputParser.parse_output_dir(isolated_output)
+            parsed = {}
+            if self._user_output_dir:
+                parsed = SQLMapOutputParser.parse_output_dir(self._user_output_dir)
             key = f"{database}.{table}" if database and table else ""
             rows = parsed.get("dump_data", {}).get(key, [])
             
