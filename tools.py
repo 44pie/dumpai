@@ -289,11 +289,11 @@ class BaseTool:
             cmd += ' --answers="Y"'
         
         # Force single thread for time-based techniques to avoid multithreading warning
-        available = self.config.get("available_techniques", "")
-        if available:
-            # If only slow techniques available (T or B only, no U/E/S)
-            fast_available = any(t in available for t in ['U', 'E', 'S'])
-            if not fast_available and "--threads" in cmd:
+        # Check if technique contains T (time-based) - multithreading is unsafe
+        technique_match = re.search(r'--technique[=\s]+([A-Z]+)', cmd, re.IGNORECASE)
+        if technique_match:
+            technique = technique_match.group(1).upper()
+            if 'T' in technique and "--threads" in cmd:
                 # Force threads=1 for time-based to avoid the warning/prompt
                 cmd = re.sub(r'--threads[=\s]+\d+', '--threads=1', cmd)
         
@@ -442,7 +442,9 @@ class GetColumns(BaseTool):
         output_dir = self._get_output_dir()
         os.makedirs(output_dir, exist_ok=True)
         
-        args = ["--columns"]
+        # --common-columns: use bruteforce column check when direct enumeration fails
+        # This is CRITICAL for time-based blind injections!
+        args = ["--columns", "--common-columns"]
         if database:
             args.append(f"-D {database}")
         if table:
