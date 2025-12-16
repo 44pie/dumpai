@@ -259,6 +259,18 @@ Analyze and respond with JSON:
             "forbidden", "access denied", "mod_security"
         ])
         
+        # Convert types_found to SQLMap technique codes
+        technique_map = {
+            "union": "U",
+            "error_based": "E", 
+            "stacked": "S",
+            "boolean_blind": "B",
+            "time_based": "T"
+        }
+        # Build techniques string ordered by speed (fast first)
+        priority_order = ["union", "error_based", "stacked", "boolean_blind", "time_based"]
+        available_techniques = "".join(technique_map[t] for t in priority_order if t in types_found)
+        
         return {
             "injection_type": injection_type,
             "is_slow": is_slow,
@@ -267,7 +279,8 @@ Analyze and respond with JSON:
             "recommended_strategy": "smart_search" if is_slow else "full_enumeration",
             "tampers_suggested": ["space2comment", "between"] if waf_detected else [],
             "speed_estimate": "slow" if is_slow else "fast",
-            "reasoning": "Fallback pattern matching"
+            "reasoning": "Fallback pattern matching",
+            "available_techniques": available_techniques
         }
     
     def prioritize_tables(self, tables: List[str], categories: List[str],
