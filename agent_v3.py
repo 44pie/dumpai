@@ -234,6 +234,13 @@ class DumpAgentV3:
         self.console.injection_analysis(injection_analysis)
         
         self.memory.injection_type = injection_analysis.get("injection_type", "unknown")
+        self.memory.available_techniques = injection_analysis.get("available_techniques", "")
+        
+        # Update config so tools can filter --technique to only available ones
+        self.config["available_techniques"] = self.memory.available_techniques
+        
+        if self.verbosity >= 1 and self.memory.available_techniques:
+            self.console.log(f"Available techniques: {self.memory.available_techniques}")
         
         if injection_analysis.get("reasoning"):
             self.console.ai_reason(
