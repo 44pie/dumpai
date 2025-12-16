@@ -426,8 +426,7 @@ class DumpAgentV3:
                 
                 # CRITICAL: Verify table actually exists (prevent AI hallucination)
                 if table_check not in tables_lower:
-                    if self.verbosity >= 1:
-                        self.console.log(f"Skip {table}: AI hallucinated (not in discovered tables)", LogLevel.DEBUG)
+                    self.console.log(f"Skip {table}: not in discovered tables (AI hallucination)", LogLevel.WARNING)
                     continue
                 
                 item_category = item.get("category", "")
