@@ -253,35 +253,38 @@ class BaseTool:
         return match.group(1) if match else ""
     
     def _extract_target_hostname(self) -> str:
-        """Extract target hostname from request file in base command."""
+        """Extract target hostname from request file path or Host header."""
         import re
         # Find -r "request_file.txt" in command
         match = re.search(r'-r\s+["\']?([^"\'\s]+)["\']?', self.base_cmd)
         if not match:
-            print(f"  [DEBUG] No -r flag found in command")
             return ""
         
         request_file = match.group(1)
-        print(f"  [DEBUG] Request file from -r: {request_file}")
         
-        if not os.path.exists(request_file):
-            print(f"  [DEBUG] Request file does not exist: {request_file}")
-            return ""
+        # FIRST: Try to extract hostname from path itself (e.g., 20251213_1/sotho.pl/file.txt)
+        # This is more reliable than reading Host header
+        path_parts = request_file.replace('\\', '/').split('/')
+        for part in path_parts:
+            # Look for domain-like patterns (contains dot, not a file extension)
+            if '.' in part and not part.endswith('.txt') and not part.endswith('.req'):
+                # Likely a hostname like sotho.pl, ipresta.ir
+                print(f"  [DEBUG] Extracted hostname from path: {part}")
+                return part
         
-        try:
-            with open(request_file, 'r') as f:
-                content = f.read(2000)
-            
-            # Extract Host header from request
-            host_match = re.search(r'^Host:\s*([^\s\r\n]+)', content, re.MULTILINE | re.IGNORECASE)
-            if host_match:
-                hostname = host_match.group(1).strip()
-                print(f"  [DEBUG] Extracted hostname: {hostname}")
-                return hostname
-            else:
-                print(f"  [DEBUG] No Host header found in request file")
-        except Exception as e:
-            print(f"  [DEBUG] Error reading request file: {e}")
+        # SECOND: Try Host header from request file content
+        if os.path.exists(request_file):
+            try:
+                with open(request_file, 'r') as f:
+                    content = f.read(2000)
+                
+                host_match = re.search(r'^Host:\s*([^\s\r\n]+)', content, re.MULTILINE | re.IGNORECASE)
+                if host_match:
+                    hostname = host_match.group(1).strip()
+                    print(f"  [DEBUG] Extracted hostname from Host header: {hostname}")
+                    return hostname
+            except:
+                pass
         
         return ""
     
