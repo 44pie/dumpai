@@ -442,9 +442,8 @@ class GetColumns(BaseTool):
         output_dir = self._get_output_dir()
         os.makedirs(output_dir, exist_ok=True)
         
-        # --common-columns: use bruteforce column check when direct enumeration fails
-        # This is CRITICAL for time-based blind injections!
-        args = ["--columns", "--common-columns"]
+        args = ["--columns"]
+        
         if database:
             args.append(f"-D {database}")
         if table:
