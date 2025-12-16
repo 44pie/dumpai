@@ -163,32 +163,70 @@ class DumpAgentV3:
             "analyze_columns": AnalyzeColumns(self.config, verbose=verbose)
         }
     
-    def _execute_tool(self, tool_name: str, **params) -> Optional[Any]:
-        """Execute a tool and record in memory."""
+    def _execute_tool(self, tool_name: str, max_retries: int = 2, **params) -> Optional[Any]:
+        """Execute a tool with AI-guided retry on failure."""
         tool = self.tools.get(tool_name)
         if not tool:
             self.console.log(f"Unknown tool: {tool_name}", LogLevel.ERROR)
             return None
         
-        self.round_num += 1
-        self.console.round_start(self.round_num, tool_name, params)
+        retry_count = 0
+        current_params = params.copy()
         
-        result = tool.execute(**params)
-        
-        summary = f"{len(result.data)} items" if result.success and result.data else result.error or "No data"
-        self.console.round_result(result.success, summary, result.data)
-        
-        self.memory.add_action(
-            tool=tool_name,
-            params=params,
-            result=result.data if result.success else None,
-            success=result.success,
-            execution_time=result.execution_time
-        )
-        
-        if not result.success and result.error:
-            self.memory.add_error(tool_name, result.error, params)
+        while retry_count <= max_retries:
+            self.round_num += 1
+            self.console.round_start(self.round_num, tool_name, current_params)
             
+            result = tool.execute(**current_params)
+            
+            summary = f"{len(result.data)} items" if result.success and result.data else result.error or "No data"
+            self.console.round_result(result.success, summary, result.data)
+            
+            self.memory.add_action(
+                tool=tool_name,
+                params=current_params,
+                result=result.data if result.success else None,
+                success=result.success,
+                execution_time=result.execution_time
+            )
+            
+            if result.success:
+                self.strategy_manager.report_success()
+                return result
+            
+            # FAILURE - ask AI for adaptation
+            self.memory.add_error(tool_name, result.error, current_params)
+            
+            # Use Planner AI to decide recovery action
+            ai_adaptation = self.planner.adapt_to_error(
+                error=result.error or "Unknown error",
+                context=result.raw_output[-2000:] if result.raw_output else "",
+                failed_action=tool_name
+            )
+            
+            if self.verbosity >= 1:
+                print(f"[ADAPT] AI suggestion: {ai_adaptation}")
+            
+            if not ai_adaptation.get("should_retry", False):
+                # AI says don't retry - skip this
+                if ai_adaptation.get("skip_reason"):
+                    self.console.log(f"AI skip: {ai_adaptation['skip_reason']}", LogLevel.WARN)
+                break
+            
+            # AI says retry - update params
+            retry_count += 1
+            self.console.log(f"AI retry {retry_count}/{max_retries}: {ai_adaptation.get('reasoning', '')}", LogLevel.INFO)
+            
+            # Apply AI-suggested parameter changes
+            new_params = ai_adaptation.get("new_params", {})
+            if new_params:
+                current_params.update(new_params)
+            
+            # Apply technique override if suggested
+            if ai_adaptation.get("technique_override"):
+                self.config["technique_override"] = ai_adaptation["technique_override"]
+            
+            # Strategy manager also tracks
             config, adaptation = self.strategy_manager.adapt_to_error(
                 error=result.error,
                 failed_tool=tool_name
@@ -199,8 +237,6 @@ class DumpAgentV3:
                     reasoning=adaptation.get("reasoning", "Error detected, changing strategy"),
                     decision=f"Switch to {adaptation['strategy_change']}"
                 )
-        else:
-            self.strategy_manager.report_success()
         
         return result
     
