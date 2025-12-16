@@ -835,13 +835,38 @@ class DumpColumns(BaseTool):
         column_data = {}
         errors = []
         
+        # Find the SQLMap session directory to copy (contains session.sqlite)
+        session_source_dir = None
+        if self._user_output_dir and os.path.isdir(self._user_output_dir):
+            for item in os.listdir(self._user_output_dir):
+                item_path = os.path.join(self._user_output_dir, item)
+                if os.path.isdir(item_path):
+                    session_file = os.path.join(item_path, "session.sqlite")
+                    if os.path.exists(session_file):
+                        session_source_dir = self._user_output_dir
+                        break
+        
         def dump_single_column(col: str) -> Tuple[str, List[Dict], str, str]:
             # CRITICAL: Each parallel column worker needs ISOLATED output dir
             # Otherwise race condition: multiple workers overwrite same CSV!
             isolated_dir = tempfile.mkdtemp(prefix=f"sqlmap_col_{col[:10]}_")
             
-            # CRITICAL FIX: Strip existing --output-dir from base_cmd to avoid duplicate
-            # SQLMap takes FIRST --output-dir, so we must remove any existing one
+            # CRITICAL v3.0.24: Copy SQLMap session to isolated dir BEFORE dump
+            # Without session, SQLMap re-probes injection = 10min timeout = 0 rows
+            if session_source_dir:
+                try:
+                    import shutil
+                    for item in os.listdir(session_source_dir):
+                        src = os.path.join(session_source_dir, item)
+                        dst = os.path.join(isolated_dir, item)
+                        if os.path.isdir(src):
+                            shutil.copytree(src, dst, dirs_exist_ok=True)
+                        else:
+                            shutil.copy2(src, dst)
+                except Exception as e:
+                    pass  # Continue even if copy fails
+            
+            # Build command - strip existing --output-dir to avoid duplicate
             cmd = self.base_cmd
             cmd = re.sub(r'--output-dir[=\s]+["\']?[^"\'\s]+["\']?\s*', '', cmd)
             cmd = re.sub(r'--session-dir[=\s]+["\']?[^"\'\s]+["\']?\s*', '', cmd)
