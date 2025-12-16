@@ -553,6 +553,56 @@ Respond with JSON:
                 "skip_reason": "Table not found in database"
             }
         
+        # Pattern: No data returned / empty result
+        if any(w in full_output for w in ["no data", "retrieved: 0", "0 entries", "empty"]):
+            if self.verbosity >= 1:
+                print("[PARSE] Detected: no data returned")
+            return {
+                "should_retry": False,
+                "skip_reason": "No data in table/columns"
+            }
+        
+        # Pattern: Rate limiting / too many requests
+        if any(w in full_output for w in ["too many", "rate limit", "429", "throttl"]):
+            if self.verbosity >= 1:
+                print("[PARSE] Detected: rate limiting, add delay")
+            return {
+                "should_retry": True,
+                "new_params": {"add_flags": "--delay=5 --safe-freq=3"},
+                "reasoning": "Rate limiting detected, retry with delays"
+            }
+        
+        # Pattern: Connection errors
+        if any(w in full_output for w in ["connection refused", "connection error", "host unreachable", "network"]):
+            if self.verbosity >= 1:
+                print("[PARSE] Detected: connection error")
+            return {
+                "should_retry": True,
+                "new_params": {"add_flags": "--retries=5"},
+                "reasoning": "Connection error, retry with more retries"
+            }
+        
+        # Pattern: Technique not working - switch technique
+        if "does not seem to be injectable" in full_output or "all tested parameters do not appear" in full_output:
+            if self.verbosity >= 1:
+                print("[PARSE] Detected: injection failing, try different technique")
+            return {
+                "should_retry": True,
+                "technique_override": "T",
+                "new_params": {"add_flags": "--time-sec=15"},
+                "reasoning": "Fast techniques failing, switch to time-based"
+            }
+        
+        # Pattern: DBMS-specific errors (MySQL gone away, etc.)
+        if any(w in full_output for w in ["mysql server has gone away", "lost connection", "broken pipe"]):
+            if self.verbosity >= 1:
+                print("[PARSE] Detected: connection dropped, reduce concurrency")
+            return {
+                "should_retry": True,
+                "new_params": {"threads_override": "1", "add_flags": "--delay=2"},
+                "reasoning": "Connection dropped, reduce concurrency and add delay"
+            }
+        
         # No local match - ask LLM for complex cases
         prompt = f"""A SQL injection action failed. Analyze and suggest recovery.
 
