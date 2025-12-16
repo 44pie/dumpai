@@ -252,6 +252,31 @@ class BaseTool:
         match = re.search(r'--output-dir[=\s]+["\']?([^"\'\s]+)["\']?', self.base_cmd)
         return match.group(1) if match else ""
     
+    def _extract_target_hostname(self) -> str:
+        """Extract target hostname from request file in base command."""
+        import re
+        # Find -r "request_file.txt" in command
+        match = re.search(r'-r\s+["\']?([^"\'\s]+)["\']?', self.base_cmd)
+        if not match:
+            return ""
+        
+        request_file = match.group(1)
+        if not os.path.exists(request_file):
+            return ""
+        
+        try:
+            with open(request_file, 'r') as f:
+                content = f.read(2000)
+            
+            # Extract Host header from request
+            host_match = re.search(r'^Host:\s*([^\s\r\n]+)', content, re.MULTILINE | re.IGNORECASE)
+            if host_match:
+                return host_match.group(1).strip()
+        except:
+            pass
+        
+        return ""
+    
     def _get_output_dir(self) -> str:
         """Get unique output directory for this run."""
         run_id = str(uuid.uuid4())[:8]
@@ -835,40 +860,49 @@ class DumpColumns(BaseTool):
         column_data = {}
         errors = []
         
-        # Find the SQLMap session directory to copy (contains session.sqlite)
-        session_source_dir = None
+        # Find the SQLMap session directory for the CORRECT target
+        # CRITICAL: Only copy session for the current target, not any random one!
+        session_target_dir = None  # Full path to target's session dir (e.g., output/sotho.pl/)
+        target_hostname = self._extract_target_hostname()
+        
         if self._user_output_dir and os.path.isdir(self._user_output_dir):
             for item in os.listdir(self._user_output_dir):
                 item_path = os.path.join(self._user_output_dir, item)
                 if os.path.isdir(item_path):
                     session_file = os.path.join(item_path, "session.sqlite")
                     if os.path.exists(session_file):
-                        session_source_dir = self._user_output_dir
-                        print(f"  [DEBUG] Session found: {session_file}")
-                        break
+                        # Check if this session matches our target
+                        if target_hostname and target_hostname in item:
+                            session_target_dir = item_path  # Full path to target dir
+                            print(f"  [DEBUG] Session found for {target_hostname}: {session_file}")
+                            break
+                        elif not target_hostname:
+                            # Fallback: use first session if we can't determine target
+                            session_target_dir = item_path
+                            print(f"  [DEBUG] Session found (no target filter): {session_file}")
+                            break
         
-        if not session_source_dir:
-            print(f"  [DEBUG] WARNING: No session found in {self._user_output_dir}")
+        if not session_target_dir:
+            print(f"  [DEBUG] WARNING: No session found for '{target_hostname}' in {self._user_output_dir}")
         
         def dump_single_column(col: str) -> Tuple[str, List[Dict], str, str]:
             # CRITICAL: Each parallel column worker needs ISOLATED output dir
             # Otherwise race condition: multiple workers overwrite same CSV!
             isolated_dir = tempfile.mkdtemp(prefix=f"sqlmap_col_{col[:10]}_")
             
-            # CRITICAL v3.0.24: Copy SQLMap session to isolated dir BEFORE dump
+            # CRITICAL v3.0.26: Copy SQLMap session for CORRECT target to isolated dir
             # Without session, SQLMap re-probes injection = 10min timeout = 0 rows
-            if session_source_dir:
+            # session_target_dir is the full path to target's directory (e.g., output/sotho.pl/)
+            if session_target_dir:
                 try:
                     import shutil
-                    for item in os.listdir(session_source_dir):
-                        src = os.path.join(session_source_dir, item)
-                        dst = os.path.join(isolated_dir, item)
-                        if os.path.isdir(src):
-                            shutil.copytree(src, dst, dirs_exist_ok=True)
-                        else:
-                            shutil.copy2(src, dst)
+                    # Copy the target directory to isolated dir, preserving structure
+                    # SQLMap expects: output_dir/hostname/session.sqlite
+                    target_name = os.path.basename(session_target_dir)
+                    dst_target_dir = os.path.join(isolated_dir, target_name)
+                    shutil.copytree(session_target_dir, dst_target_dir, dirs_exist_ok=True)
                 except Exception as e:
-                    pass  # Continue even if copy fails
+                    print(f"  [DEBUG] Session copy failed: {e}")
             
             # Build command - strip existing --output-dir to avoid duplicate
             cmd = self.base_cmd
