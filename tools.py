@@ -844,7 +844,11 @@ class DumpColumns(BaseTool):
                     session_file = os.path.join(item_path, "session.sqlite")
                     if os.path.exists(session_file):
                         session_source_dir = self._user_output_dir
+                        print(f"  [DEBUG] Session found: {session_file}")
                         break
+        
+        if not session_source_dir:
+            print(f"  [DEBUG] WARNING: No session found in {self._user_output_dir}")
         
         def dump_single_column(col: str) -> Tuple[str, List[Dict], str, str]:
             # CRITICAL: Each parallel column worker needs ISOLATED output dir
@@ -907,8 +911,21 @@ class DumpColumns(BaseTool):
             key = f"{database}.{table}" if database and table else ""
             rows = parsed.get("dump_data", {}).get(key, [])
             
-            if not rows:
+            # DEBUG: Log what we found
+            parse_method = "CSV"
+            if rows:
+                sample = rows[0] if rows else {}
+                # Check if column name matches (case-insensitive)
+                actual_keys = list(sample.keys())
+                if actual_keys and col not in actual_keys:
+                    # Column name mismatch - remap
+                    print(f"  [DEBUG] {col}: CSV key mismatch, remapping {actual_keys[0]} -> {col}")
+                    rows = [{col: r.get(actual_keys[0], "")} for r in rows]
+            else:
+                parse_method = "TEXT"
                 rows = self._parse_single_column_output(output, col)
+            
+            print(f"  [DEBUG] {col}: {parse_method} -> {len(rows)} rows, sample={rows[0] if rows else None}")
             
             # Cleanup isolated dir
             try:
