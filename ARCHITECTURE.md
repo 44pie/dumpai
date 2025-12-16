@@ -272,6 +272,10 @@ Options:
 
 ## Version History
 
+### v3.0.10 (2025-12-16)
+- Fixed: available_techniques now always populated from LLM or fallback
+- Added log output showing detected techniques at verbosity >= 1
+
 ### v3.0.9 (2025-12-16)
 - Filter `--technique` to only available (detected) techniques
 - Preserve user's `--output-dir` for SQLMap cached session
