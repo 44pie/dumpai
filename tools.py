@@ -213,14 +213,25 @@ class BaseTool:
             temp_dir = tempfile.mkdtemp(prefix="sqlmap_")
             cmd += f" --output-dir={temp_dir}"
         
-        # Optimize --technique order: fast techniques first (U=Union, E=Error, S=Stacked, Q=inline, T=time, B=boolean)
+        # Optimize --technique: use only available techniques in optimal order
+        available = self.config.get("available_techniques", "")
         technique_match = re.search(r'--technique[=\s]+([A-Z]+)', cmd, re.IGNORECASE)
+        
         if technique_match:
             original = technique_match.group(1).upper()
-            # Priority order: U > E > S > Q > B > T (fast to slow)
-            priority = {'U': 0, 'E': 1, 'S': 2, 'Q': 3, 'B': 4, 'T': 5}
-            optimized = ''.join(sorted(original, key=lambda x: priority.get(x, 99)))
-            if optimized != original:
+            
+            if available:
+                # Filter to only available techniques and order by speed
+                priority = {'U': 0, 'E': 1, 'S': 2, 'Q': 3, 'B': 4, 'T': 5}
+                # Keep only techniques that are both requested AND available
+                filtered = [t for t in original if t in available]
+                optimized = ''.join(sorted(filtered, key=lambda x: priority.get(x, 99)))
+            else:
+                # No available info yet, just reorder by speed
+                priority = {'U': 0, 'E': 1, 'S': 2, 'Q': 3, 'B': 4, 'T': 5}
+                optimized = ''.join(sorted(original, key=lambda x: priority.get(x, 99)))
+            
+            if optimized and optimized != original:
                 cmd = re.sub(r'--technique[=\s]+[A-Z]+', f'--technique={optimized}', cmd, flags=re.IGNORECASE)
         
         for arg in extra_args:
