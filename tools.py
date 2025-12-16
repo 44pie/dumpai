@@ -283,6 +283,20 @@ class BaseTool:
         if "--ignore-stdin" not in cmd:
             cmd += " --ignore-stdin"
         
+        # CRITICAL: Answer YES to important prompts (common column check, etc.)
+        # --batch alone answers N to many questions which breaks extraction
+        if "--answers" not in cmd:
+            cmd += ' --answers="Y"'
+        
+        # Force single thread for time-based techniques to avoid multithreading warning
+        available = self.config.get("available_techniques", "")
+        if available:
+            # If only slow techniques available (T or B only, no U/E/S)
+            fast_available = any(t in available for t in ['U', 'E', 'S'])
+            if not fast_available and "--threads" in cmd:
+                # Force threads=1 for time-based to avoid the warning/prompt
+                cmd = re.sub(r'--threads[=\s]+\d+', '--threads=1', cmd)
+        
         # Only add temp output-dir if user didn't specify one
         if "--output-dir" not in cmd:
             temp_dir = tempfile.mkdtemp(prefix="sqlmap_")
