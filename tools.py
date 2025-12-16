@@ -191,13 +191,16 @@ class BaseTool:
             else:
                 cmd = cmd.replace("sqlmap ", f"python3 {SQLMAP_PATH} ")
         
+        # Remove user's --output-dir to use our isolated directories
+        cmd = re.sub(r'--output-dir[=\s]+["\']?[^"\'\s]+["\']?\s*', '', cmd)
+        
         if "--batch" not in cmd:
             cmd += " --batch"
         
         if "--ignore-stdin" not in cmd:
             cmd += " --ignore-stdin"
         
-        if output_dir and "--output-dir" not in cmd:
+        if output_dir:
             cmd += f" --output-dir={output_dir}"
         
         for arg in extra_args:
