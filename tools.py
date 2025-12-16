@@ -258,10 +258,14 @@ class BaseTool:
         # Find -r "request_file.txt" in command
         match = re.search(r'-r\s+["\']?([^"\'\s]+)["\']?', self.base_cmd)
         if not match:
+            print(f"  [DEBUG] No -r flag found in command")
             return ""
         
         request_file = match.group(1)
+        print(f"  [DEBUG] Request file from -r: {request_file}")
+        
         if not os.path.exists(request_file):
+            print(f"  [DEBUG] Request file does not exist: {request_file}")
             return ""
         
         try:
@@ -271,9 +275,13 @@ class BaseTool:
             # Extract Host header from request
             host_match = re.search(r'^Host:\s*([^\s\r\n]+)', content, re.MULTILINE | re.IGNORECASE)
             if host_match:
-                return host_match.group(1).strip()
-        except:
-            pass
+                hostname = host_match.group(1).strip()
+                print(f"  [DEBUG] Extracted hostname: {hostname}")
+                return hostname
+            else:
+                print(f"  [DEBUG] No Host header found in request file")
+        except Exception as e:
+            print(f"  [DEBUG] Error reading request file: {e}")
         
         return ""
     
