@@ -717,7 +717,7 @@ class DumpTable(BaseTool):
         if table:
             args.append(f"-T {table}")
         if max_rows > 0:
-            args.append(f"--stop {max_rows}")
+            args.append(f"--stop={max_rows}")
         
         cmd = self._build_cmd(args, output_dir)
         stdout, stderr, code = self._run_cmd(cmd, stream_output=self.verbose)
@@ -796,7 +796,7 @@ class DumpColumns(BaseTool):
             cols_str = ",".join(columns)
             args.append(f"-C {cols_str}")
         if max_rows > 0:
-            args.append(f"--stop {max_rows}")
+            args.append(f"--stop={max_rows}")
         
         cmd = self._build_cmd(args)
         stdout, stderr, code = self._run_cmd(cmd, stream_output=self.verbose)
