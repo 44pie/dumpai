@@ -156,6 +156,81 @@ class SQLMapOutputParser:
                             columns.append(col)
         
         return columns
+    
+    @staticmethod
+    def parse_log_for_search_results(log_content: str, pattern: str = "") -> List[str]:
+        """Extract search results from SQLMap log.
+        
+        Parses formats like:
+        - [INFO] found table 'database.table'
+        - Database: xxx [N tables] | table_name |
+        - [INFO] fetching tables like 'pattern' for database 'db'
+        """
+        tables = []
+        current_db = None
+        in_table_section = False
+        
+        for line in log_content.split("\n"):
+            line_stripped = line.strip()
+            line_lower = line_stripped.lower()
+            
+            # Parse "Database: xxx"
+            if line_stripped.startswith("Database:"):
+                current_db = line_stripped.split(":", 1)[1].strip()
+                continue
+            
+            # Parse "[N table(s)]"
+            if re.match(r'\[\d+ tables?\]', line_stripped):
+                in_table_section = True
+                continue
+            
+            # Parse "| table_name |" format
+            if line_stripped.startswith("|") and line_stripped.endswith("|"):
+                table_name = line_stripped.strip("| ").strip()
+                if table_name and not table_name.startswith("-") and table_name.lower() not in ["tables", "table"]:
+                    if len(table_name) > 2:
+                        if current_db:
+                            table_ref = f"{current_db}.{table_name}"
+                        else:
+                            table_ref = table_name
+                        if table_ref not in tables:
+                            tables.append(table_ref)
+                            in_table_section = True
+            
+            # End of table section
+            if line_stripped.startswith("+") and "---" in line_stripped and in_table_section:
+                in_table_section = False
+            
+            # Parse "[INFO] found table 'db.table'"
+            if "found table" in line_lower or "retrieved table" in line_lower:
+                match = re.search(r"'([^']+)'", line)
+                if match:
+                    table_ref = match.group(1)
+                    if table_ref not in tables and len(table_ref) > 2:
+                        tables.append(table_ref)
+            
+            # Parse "fetching tables like 'pattern' for database 'db'"
+            if "fetching tables like" in line_lower:
+                match = re.search(r"for database\s+'([^']+)'", line, re.IGNORECASE)
+                if match:
+                    current_db = match.group(1)
+        
+        return tables
+    
+    @staticmethod
+    def read_log_from_output_dir(output_dir: str) -> str:
+        """Read SQLMap log file from output directory."""
+        if not os.path.exists(output_dir):
+            return ""
+        
+        # SQLMap saves logs in output_dir/target_host/log
+        for host_dir in Path(output_dir).iterdir():
+            if host_dir.is_dir():
+                log_file = host_dir / "log"
+                if log_file.exists():
+                    return log_file.read_text(encoding='utf-8', errors='ignore')
+        
+        return ""
 
 
 class BaseTool:
@@ -402,21 +477,24 @@ class SearchTables(BaseTool):
             output = stdout + stderr
             
             tables = []
-            current_db = None
+            current_db = target_db or None
             in_table_section = False
             
             for line in output.split("\n"):
                 line_stripped = line.strip()
                 line_lower = line_stripped.lower()
                 
+                # Parse "Database: xxx"
                 if line_stripped.startswith("Database:"):
                     current_db = line_stripped.split(":", 1)[1].strip()
                     continue
                 
+                # Parse "[N table(s)]" marker
                 if re.match(r'\[\d+ tables?\]', line_stripped):
                     in_table_section = True
                     continue
                 
+                # Parse "| table_name |" format
                 if in_table_section and line_stripped.startswith("|") and line_stripped.endswith("|"):
                     table_name = line_stripped.strip("| ").strip()
                     if table_name and not table_name.startswith("-") and table_name.lower() != "tables":
@@ -428,10 +506,12 @@ class SearchTables(BaseTool):
                             if table_ref not in tables:
                                 tables.append(table_ref)
                 
+                # End of table section
                 if line_stripped.startswith("+") and "-" in line_stripped and in_table_section:
                     if tables:
                         in_table_section = False
                 
+                # Parse "[INFO] found table 'db.table'" format
                 if "found" in line_lower and "table" in line_lower:
                     match = re.search(r"'([^']+)'", line)
                     if match:
@@ -445,7 +525,48 @@ class SearchTables(BaseTool):
                         elif len(parts) == 1 and len(table_ref) > 2:
                             if table_ref not in tables:
                                 tables.append(table_ref)
+                
+                # Parse "[INFO] searching table 'table'" - may indicate match
+                if "searching table" in line_lower or "found table" in line_lower:
+                    match = re.search(r"'([^']+)'", line)
+                    if match:
+                        tbl = match.group(1)
+                        if '.' in tbl:
+                            if tbl not in tables:
+                                tables.append(tbl)
+                        elif current_db and len(tbl) > 2:
+                            table_ref = f"{current_db}.{tbl}"
+                            if table_ref not in tables:
+                                tables.append(table_ref)
+                
+                # Parse "like '...%pattern%...'" results
+                if "like" in line_lower and pattern.lower() in line_lower:
+                    match = re.search(r"table[^']*'([^']+)'", line, re.IGNORECASE)
+                    if match:
+                        tbl = match.group(1).replace('%', '')
+                        if tbl and len(tbl) > 2 and tbl.lower() not in IGNORE_TLDS:
+                            if current_db:
+                                table_ref = f"{current_db}.{tbl}"
+                            else:
+                                table_ref = tbl
+                            if table_ref not in tables:
+                                tables.append(table_ref)
             
+            # Fallback 1: Parse log file from output directory for search results
+            # Check both our temp dir AND user's --output-dir (SQLMap writes to user's dir)
+            dirs_to_check = [output_dir]
+            if self._user_output_dir:
+                dirs_to_check.append(self._user_output_dir)
+            
+            for check_dir in dirs_to_check:
+                log_content = SQLMapOutputParser.read_log_from_output_dir(check_dir)
+                if log_content:
+                    log_tables = SQLMapOutputParser.parse_log_for_search_results(log_content, pattern)
+                    for tbl in log_tables:
+                        if tbl not in tables:
+                            tables.append(tbl)
+            
+            # Fallback 2: parse output directory for any saved tables (dump CSVs)
             parsed = SQLMapOutputParser.parse_output_dir(output_dir)
             if parsed.get("tables"):
                 for db, db_tables in parsed["tables"].items():
@@ -454,6 +575,18 @@ class SearchTables(BaseTool):
                             table_ref = f"{db}.{tbl}"
                             if table_ref not in tables:
                                 tables.append(table_ref)
+            
+            # Debug: print results for this pattern
+            if self.verbose:
+                if tables:
+                    print(f"[SEARCH] Pattern '{pattern}' found: {tables}")
+                else:
+                    # Save raw output for debugging when no tables found
+                    debug_file = os.path.join(output_dir, f"search_debug_{pattern}.txt")
+                    with open(debug_file, 'w') as f:
+                        f.write(f"Pattern: {pattern}\nDatabase: {target_db}\n\n")
+                        f.write(output)
+                    print(f"[SEARCH] Pattern '{pattern}' found nothing. Debug: {debug_file}")
             
             return pattern, output, tables
         
