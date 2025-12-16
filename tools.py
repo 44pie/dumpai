@@ -502,6 +502,12 @@ class SearchTables(BaseTool):
             if target_db:
                 args.append(f"-D {target_db}")
             cmd = self._build_cmd(args, output_dir)
+            
+            # CRITICAL: For --search, we must answer N to "dump found tables?"
+            # Otherwise SQLMap starts dumping ALL found tables which takes forever
+            # Replace --answers="Y" with --answers="dump=N" for search commands
+            cmd = cmd.replace('--answers="Y"', '--answers="dump=N,Y"')
+            
             stdout, stderr, code = self._run_cmd(cmd, stream_output=False)
             output = stdout + stderr
             
