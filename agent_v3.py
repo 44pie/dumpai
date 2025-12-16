@@ -410,8 +410,26 @@ class DumpAgentV3:
             self.console.table_priority(prioritized)
             
             extraction_plan = {}
+            
+            # Normalize table names for comparison (handle db.table format)
+            tables_lower = set()
+            for t in tables:
+                tables_lower.add(t.lower())
+                if '.' in t:
+                    tables_lower.add(t.split('.', 1)[1].lower())
+            
             for item in prioritized[:20]:
                 table = item["table"]
+                table_check = table.lower()
+                if '.' in table:
+                    table_check = table.split('.', 1)[1].lower()
+                
+                # CRITICAL: Verify table actually exists (prevent AI hallucination)
+                if table_check not in tables_lower:
+                    if self.verbosity >= 1:
+                        self.console.log(f"Skip {table}: AI hallucinated (not in discovered tables)", LogLevel.DEBUG)
+                    continue
+                
                 item_category = item.get("category", "")
                 
                 if item_category and item_category not in self.categories:
