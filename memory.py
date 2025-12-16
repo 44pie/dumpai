@@ -51,6 +51,7 @@ class Memory:
     cms_detected: str = ""
     database_type: str = ""
     injection_type: str = ""
+    available_techniques: str = ""  # SQLMap technique codes: U=Union, E=Error, S=Stacked, B=Boolean, T=Time, Q=inline
     
     hypotheses: List[Hypothesis] = field(default_factory=list)
     issue_log: List[Dict] = field(default_factory=list)
