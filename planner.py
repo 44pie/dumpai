@@ -215,6 +215,22 @@ Analyze and respond with JSON:
             if not result.get("available_techniques"):
                 fallback = self._fallback_injection_analysis(sqlmap_output)
                 result["available_techniques"] = fallback.get("available_techniques", "")
+            
+            # CRITICAL OVERRIDE: If UNION or error-based is detected in output, force is_slow=False
+            # LLM sometimes incorrectly returns is_slow=True even when UNION is available
+            output_lower = sqlmap_output.lower()
+            has_fast_technique = (
+                "union query" in output_lower or 
+                "union-based" in output_lower or
+                "error-based" in output_lower or
+                "stacked queries" in output_lower
+            )
+            if has_fast_technique and result.get("is_slow"):
+                if self.verbosity >= 1:
+                    print(f"[OVERRIDE] UNION/error-based detected, forcing is_slow=False")
+                result["is_slow"] = False
+                result["speed_estimate"] = "fast"
+                result["recommended_strategy"] = "full_enumeration"
         
         if self.verbosity >= 1 and result:
             print(f"[AI] Injection: {result.get('injection_type', '?')} ({result.get('speed_estimate', '?')})")
