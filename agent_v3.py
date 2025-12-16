@@ -478,6 +478,7 @@ class DumpAgentV3:
         result = self._execute_tool(
             "search_tables", 
             patterns=patterns,
+            database=database,
             parallel=True,
             max_workers=self.max_parallel
         )
