@@ -503,6 +503,57 @@ Respond with JSON:
                 "alternative_action": "action_name"
             }
         """
+        # FAST LOCAL PARSING first - before calling LLM
+        full_output = f"{error} {context}".lower()
+        
+        # Pattern: "unable to retrieve column names" + "common column existence check"
+        if "unable to retrieve" in full_output and "column" in full_output:
+            if self.verbosity >= 1:
+                print("[PARSE] Detected: column enumeration failed, suggest --common-columns")
+            return {
+                "should_retry": True,
+                "new_params": {"add_flags": "--common-columns"},
+                "reasoning": "Column enumeration failed, retry with common column bruteforce"
+            }
+        
+        # Pattern: WAF/IPS detected
+        if any(w in full_output for w in ["waf", "blocked", "forbidden", "403", "firewall", "ips"]):
+            if self.verbosity >= 1:
+                print("[PARSE] Detected: WAF/IPS blocking")
+            return {
+                "should_retry": True,
+                "tamper_script": "randomcase,space2comment",
+                "reasoning": "WAF detected, retry with tamper scripts"
+            }
+        
+        # Pattern: Timeout / slow connection
+        if any(w in full_output for w in ["timed out", "timeout", "connection reset"]):
+            if self.verbosity >= 1:
+                print("[PARSE] Detected: timeout, increase delay")
+            return {
+                "should_retry": True,
+                "new_params": {"add_flags": "--time-sec=30 --delay=3"},
+                "reasoning": "Timeout detected, retry with longer delays"
+            }
+        
+        # Pattern: Multi-threading unsafe warning
+        if "multi-threading is considered unsafe" in full_output:
+            if self.verbosity >= 1:
+                print("[PARSE] Detected: threading warning, force threads=1")
+            return {
+                "should_retry": True,
+                "new_params": {"threads_override": "1"},
+                "reasoning": "Threading unsafe for time-based, retry with threads=1"
+            }
+        
+        # Pattern: Table/column not found - skip
+        if "table" in full_output and "not found" in full_output:
+            return {
+                "should_retry": False,
+                "skip_reason": "Table not found in database"
+            }
+        
+        # No local match - ask LLM for complex cases
         prompt = f"""A SQL injection action failed. Analyze and suggest recovery.
 
 FAILED ACTION: {failed_action}
