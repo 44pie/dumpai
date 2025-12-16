@@ -213,6 +213,16 @@ class BaseTool:
             temp_dir = tempfile.mkdtemp(prefix="sqlmap_")
             cmd += f" --output-dir={temp_dir}"
         
+        # Optimize --technique order: fast techniques first (U=Union, E=Error, S=Stacked, Q=inline, T=time, B=boolean)
+        technique_match = re.search(r'--technique[=\s]+([A-Z]+)', cmd, re.IGNORECASE)
+        if technique_match:
+            original = technique_match.group(1).upper()
+            # Priority order: U > E > S > Q > B > T (fast to slow)
+            priority = {'U': 0, 'E': 1, 'S': 2, 'Q': 3, 'B': 4, 'T': 5}
+            optimized = ''.join(sorted(original, key=lambda x: priority.get(x, 99)))
+            if optimized != original:
+                cmd = re.sub(r'--technique[=\s]+[A-Z]+', f'--technique={optimized}', cmd, flags=re.IGNORECASE)
+        
         for arg in extra_args:
             cmd += f" {arg}"
         
