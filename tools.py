@@ -830,7 +830,11 @@ class DumpColumns(BaseTool):
         errors = []
         
         def dump_single_column(col: str) -> Tuple[str, List[Dict], str, str]:
-            args = ["--dump"]
+            # CRITICAL: Each parallel column worker needs ISOLATED output dir
+            # Otherwise race condition: multiple workers overwrite same CSV!
+            isolated_dir = tempfile.mkdtemp(prefix=f"sqlmap_col_{col[:10]}_")
+            
+            args = ["--dump", f"--output-dir={isolated_dir}"]
             if database:
                 args.append(f"-D {database}")
             if table:
@@ -839,18 +843,34 @@ class DumpColumns(BaseTool):
             if max_rows > 0:
                 args.append(f"--stop {max_rows}")
             
-            cmd = self._build_cmd(args)
+            # Build command WITHOUT user's output-dir to avoid race condition
+            cmd = self.base_cmd
+            if "--batch" not in cmd:
+                cmd += " --batch"
+            if "--ignore-stdin" not in cmd:
+                cmd += " --ignore-stdin"
+            if "--answers" not in cmd:
+                cmd += ' --answers="Y"'
+            for arg in args:
+                cmd += f" {arg}"
+            
             stdout, stderr, code = self._run_cmd(cmd, stream_output=False)
             output = stdout + stderr
             
-            parsed = {}
-            if self._user_output_dir:
-                parsed = SQLMapOutputParser.parse_output_dir(self._user_output_dir)
+            # Parse from isolated directory
+            parsed = SQLMapOutputParser.parse_output_dir(isolated_dir)
             key = f"{database}.{table}" if database and table else ""
             rows = parsed.get("dump_data", {}).get(key, [])
             
             if not rows:
                 rows = self._parse_single_column_output(output, col)
+            
+            # Cleanup isolated dir
+            try:
+                import shutil
+                shutil.rmtree(isolated_dir, ignore_errors=True)
+            except:
+                pass
             
             return col, rows, output, "" if rows else f"No data for {col}"
         
