@@ -157,14 +157,18 @@ class Memory:
     def add_extracted_data(self, category: str, rows: List[Dict], 
                            source_table: str = ""):
         """Add extracted data (thread-safe)."""
-        for row in rows:
-            row["_source_table"] = source_table
-            row["_extracted_at"] = datetime.now().isoformat()
-        
+        if not rows:
+            return
+            
         with self._lock:
-            if category in self.extracted_data:
-                self.extracted_data[category].extend(rows)
-                self.stats["rows_extracted"] += len(rows)
+            if category not in self.extracted_data:
+                self.extracted_data[category] = []
+            
+            self.extracted_data[category].append({
+                "source": source_table,
+                "data": rows
+            })
+            self.stats["rows_extracted"] += len(rows)
     
     def get_context_for_ai(self, max_items: int = 10) -> str:
         """Get compressed context for AI prompts."""
