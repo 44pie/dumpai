@@ -840,25 +840,39 @@ class DumpColumns(BaseTool):
             # Otherwise race condition: multiple workers overwrite same CSV!
             isolated_dir = tempfile.mkdtemp(prefix=f"sqlmap_col_{col[:10]}_")
             
-            args = ["--dump", f"--output-dir={isolated_dir}"]
-            if database:
-                args.append(f"-D {database}")
-            if table:
-                args.append(f"-T {table}")
-            args.append(f"-C {col}")
-            if max_rows > 0:
-                args.append(f"--stop {max_rows}")
-            
-            # Build command WITHOUT user's output-dir to avoid race condition
+            # CRITICAL FIX: Strip existing --output-dir from base_cmd to avoid duplicate
+            # SQLMap takes FIRST --output-dir, so we must remove any existing one
             cmd = self.base_cmd
+            cmd = re.sub(r'--output-dir[=\s]+["\']?[^"\'\s]+["\']?\s*', '', cmd)
+            cmd = re.sub(r'--session-dir[=\s]+["\']?[^"\'\s]+["\']?\s*', '', cmd)
+            
+            # Replace sqlmap path if needed
+            if "sqlmap" in cmd and SQLMAP_PATH and os.path.exists(SQLMAP_PATH):
+                match = re.search(r'(.*?)(python3\s+\S*sqlmap\.py|sqlmap)\s', cmd)
+                if match:
+                    prefix = match.group(1)
+                    sqlmap_part = cmd[match.end()-1:]
+                    cmd = f"{prefix}python3 {SQLMAP_PATH} {sqlmap_part}"
+                elif cmd.startswith("sqlmap "):
+                    cmd = f"python3 {SQLMAP_PATH} " + cmd[7:]
+            
             if "--batch" not in cmd:
                 cmd += " --batch"
             if "--ignore-stdin" not in cmd:
                 cmd += " --ignore-stdin"
             if "--answers" not in cmd:
                 cmd += ' --answers="Y"'
-            for arg in args:
-                cmd += f" {arg}"
+            
+            # Add isolated output dir AFTER stripping old one
+            cmd += f" --output-dir={isolated_dir}"
+            cmd += " --dump"
+            if database:
+                cmd += f" -D {database}"
+            if table:
+                cmd += f" -T {table}"
+            cmd += f" -C {col}"
+            if max_rows > 0:
+                cmd += f" --stop={max_rows}"
             
             stdout, stderr, code = self._run_cmd(cmd, stream_output=False)
             output = stdout + stderr
